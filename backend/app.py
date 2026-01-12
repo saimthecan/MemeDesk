@@ -1,5 +1,7 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 from db import pool
 from routes_coins import router as coins_router
 from routes_trades import router as trades_router
@@ -10,32 +12,34 @@ from routes_snapshot import router as snapshot_router
 from routes_dexscreener import router as dexscreener_router
 from routes_wizard import router as wizard_router
 
-
-
-
 app = FastAPI(title="Memecoin Trade Tracker API")
+
+VERCEL_FRONTEND_URL = os.getenv("VERCEL_FRONTEND_URL")
+
+allow_origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+
+if VERCEL_FRONTEND_URL:
+    allow_origins.append(VERCEL_FRONTEND_URL)
 
 app.add_middleware(
     CORSMiddleware,
-     allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=allow_origins,
+    allow_origin_regex=r"^https://.*\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-
 @app.on_event("startup")
 def startup():
     pool.open()
 
-
 @app.on_event("shutdown")
 def shutdown():
     pool.close()
-
 
 @app.get("/health")
 def health():
@@ -43,8 +47,6 @@ def health():
         with conn.cursor() as cur:
             cur.execute("SELECT 1;")
             one = cur.fetchone()[0]
-            # `context` is legacy (old "active coin" UX). It may exist in DB but
-            # current app logic doesn't rely on it anymore.
             row = None
             try:
                 cur.execute("SELECT id, active_ca, updated_ts FROM context WHERE id = 1;")
@@ -65,7 +67,7 @@ def health():
             else None
         ),
     }
-    
+
 app.include_router(coins_router)
 app.include_router(trades_router)
 app.include_router(tips_router)
