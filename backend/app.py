@@ -1,6 +1,7 @@
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi import Header, HTTPException
 
 from db import pool
 from routes_coins import router as coins_router
@@ -15,6 +16,7 @@ from routes_wizard import router as wizard_router
 app = FastAPI(title="Memecoin Trade Tracker API")
 
 VERCEL_FRONTEND_URL = os.getenv("VERCEL_FRONTEND_URL")
+WARMUP_KEY = os.getenv("WARMUP_KEY")
 
 allow_origins = [
     "http://localhost:3000",
@@ -32,6 +34,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.get("/warmup")
+def warmup(x_warmup_key: str | None = Header(default=None)):
+    # basit koruma
+    if WARMUP_KEY and x_warmup_key != WARMUP_KEY:
+        raise HTTPException(status_code=401, detail="unauthorized")
+
+    # Render + Neon uyansın diye DB ping
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1;")
+            one = cur.fetchone()[0]
+
+    return {"ok": True, "db_select_1": one}
 
 @app.on_event("startup")
 def startup():

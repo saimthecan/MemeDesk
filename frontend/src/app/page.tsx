@@ -404,6 +404,8 @@ export default function WorkspaceDashboard() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warmingUp, setWarmingUp] = useState(false);
+  const [warmupMsg, setWarmupMsg] = useState<string | null>(null);
 
   // logo cache
   const [logoByCa, setLogoByCa] = useState<Record<string, string>>({});
@@ -426,6 +428,28 @@ export default function WorkspaceDashboard() {
       setError(errMsg(e));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function warmupSystem() {
+    if (warmingUp) return;
+    setWarmingUp(true);
+    setWarmupMsg(null);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/warmup", {
+        method: "POST",
+        cache: "no-store",
+      });
+      const txt = await res.text();
+      if (!res.ok) throw new Error(`Warmup failed (${res.status}): ${txt}`);
+      setWarmupMsg("Sistem uyandı ✅");
+    } catch (e: unknown) {
+      setWarmupMsg(null);
+      setError(errMsg(e));
+    } finally {
+      setWarmingUp(false);
     }
   }
 
@@ -792,15 +816,30 @@ async function downloadSnapshot(): Promise<void> {
             sekmesinde.
           </p>
         </div>
-        <button
-          className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm hover:bg-zinc-800 disabled:opacity-60"
-          onClick={refreshAll}
-          disabled={loading}
-          type="button"
-        >
-          Yenile
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm hover:bg-zinc-800 disabled:opacity-60"
+            onClick={refreshAll}
+            disabled={loading}
+            type="button"
+          >
+            Yenile
+          </button>
+          <button
+            className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm hover:bg-zinc-800 disabled:opacity-60"
+            onClick={() => void warmupSystem()}
+            disabled={warmingUp}
+            type="button"
+            title="Render + Neon uyandırır"
+          >
+            {warmingUp ? "Uyandırılıyor…" : "Sistemi uyandır"}
+          </button>
+        </div>
       </div>
+
+      {warmupMsg ? (
+        <div className="text-xs text-zinc-400">{warmupMsg}</div>
+      ) : null}
 
       {error ? (
         <div className="rounded-2xl border border-rose-900/70 bg-rose-950/40 p-4 text-sm text-rose-100">
