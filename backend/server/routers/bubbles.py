@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query
-from db import pool
-from schemas_bubbles import BubblesSet
+from ..db import pool
+from ..schemas.bubbles import BubblesSet
 
 router = APIRouter(prefix="/bubbles", tags=["bubbles"])
 

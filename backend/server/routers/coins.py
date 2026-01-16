@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query
-from db import pool
-from schemas_coins import CoinCreate, CoinOut
+from ..db import pool
+from ..schemas.coins import CoinCreate, CoinOut
 
 router = APIRouter(prefix="/coins", tags=["coins"])
 

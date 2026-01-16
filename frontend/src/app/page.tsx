@@ -1323,7 +1323,7 @@ async function downloadSnapshot(): Promise<void> {
             <div className="flex items-center gap-2">
               <h2 className="text-base font-semibold text-zinc-100">Snapshot</h2>
               <span
-                title="Snapshot, açık trade ve alpha calls gibi anlık verilerin ham JSON kaydıdır."
+                title="Snapshot, açık trade ve alpha calls verilerinin tamamının ham JSON kaydıdır."
                 className="inline-flex h-5 w-5 cursor-pointer items-center justify-center rounded-full border border-zinc-700 bg-slate-950 text-xs font-semibold text-zinc-200"
                 aria-label="Snapshot info"
               >

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Query
-from db import pool
+from ..db import pool
 
 
 router = APIRouter(tags=["snapshot"])

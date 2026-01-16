@@ -1,8 +1,8 @@
 from datetime import datetime
 import uuid
 from fastapi import APIRouter, HTTPException, Query
-from db import pool
-from schemas_trades import (
+from ..db import pool
+from ..schemas.trades import (
     TradeOpen,
     TradeClose,
     TradeOut,

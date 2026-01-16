@@ -5,7 +5,7 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from db import pool
+from ..db import pool
 
 router = APIRouter(prefix="/wizard", tags=["wizard"])
 

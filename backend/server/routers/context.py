@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
-from db import pool
-from schemas import ContextOut, ContextSet
+from ..db import pool
+from ..schemas.context import ContextOut, ContextSet
 
 router = APIRouter(prefix="/context", tags=["context"])
 

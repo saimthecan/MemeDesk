@@ -1,7 +1,7 @@
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Query
-from db import pool
-from schemas_tips import (
+from ..db import pool
+from ..schemas.tips import (
     AccountCreate,
     AccountOut,
     TipCreate,

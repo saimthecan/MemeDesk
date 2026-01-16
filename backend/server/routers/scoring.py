@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query
-from db import pool
-from schemas_scoring import ScoreCreate, ScoreOut
+from ..db import pool
+from ..schemas.scoring import ScoreCreate, ScoreOut
 
 router = APIRouter(prefix="/scoring", tags=["scoring"])
 

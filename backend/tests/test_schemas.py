@@ -7,9 +7,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from pydantic import ValidationError
 
-from schemas_scoring import ScoreCreate
-from schemas_tips import TipCreate, TipUpdate
-from schemas_trades import TradeClose, TradeOpen
+from server.schemas.scoring import ScoreCreate
+from server.schemas.tips import TipCreate, TipUpdate
+from server.schemas.trades import TradeClose, TradeOpen
 
 
 class TestSchemas(unittest.TestCase):

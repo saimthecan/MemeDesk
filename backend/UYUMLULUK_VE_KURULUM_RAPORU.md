@@ -10,29 +10,37 @@
 ### ✅ Backend Yapısı
 ```
 backend/
-├── app.py (routes import ediyor - OK)
-├── db.py (connection pool - OK)
-├── routes_coins.py (mevcut)
-├── routes_trades.py (mevcut)
-├── routes_tips.py (mevcut)
-├── routes_bubbles.py (eski sistem - tutulacak)
-├── routes_scoring.py (eski sistem - tutulacak)
-├── routes_snapshot.py (eski bubbles/scoring ile çalışıyor)
-├── routes_wizard.py (OK)
-├── routes_dexscreener.py (OK)
-├── schemas_trades.py (mevcut)
-├── schemas_tips.py (mevcut)
-├── schemas_bubbles.py (OK)
-├── schemas_scoring.py (OK)
-└── migrations/
-    ├── 001_coin_symbol_and_both.sql
-    ├── 002_coin_chain.sql
-    └── 003_trade_tip_bubbles_scoring.sql
+- app.py (wrapper - OK)
+- server/
+  - main.py (routes import ediyor - OK)
+  - db.py (connection pool - OK)
+  - routers/
+    - bubbles.py (eski sistem - tutulacak)
+    - coins.py (mevcut)
+    - context.py
+    - dexscreener.py
+    - scoring.py (eski sistem - tutulacak)
+    - snapshot.py (eski bubbles/scoring ile calisiyor)
+    - tips.py (mevcut)
+    - trades.py (mevcut)
+    - wizard.py (OK)
+  - schemas/
+    - bubbles.py (OK)
+    - coins.py
+    - context.py
+    - scoring.py (OK)
+    - tips.py (mevcut)
+    - trades.py (mevcut)
+  - __init__.py
+- migrations/
+  - 001_coin_symbol_and_both.sql
+  - 002_coin_chain.sql
+  - 003_trade_tip_bubbles_scoring.sql
 ```
 
 ### ⚠️ Uyumluluk Kontrol Sonuçları
 
-#### 1. **routes_snapshot.py** - GÜNCELLEME GEREKLİ ❌
+#### 1. **server/routers/snapshot.py** - GÜNCELLEME GEREKLİ ❌
 
 **Problem:** Snapshot endpoint'i hala eski `bubbles_clusters`, `bubbles_others`, `scoring` tablolarını kullanıyor.
 
@@ -53,19 +61,19 @@ others = [{"rank": r[0], "pct": float(r[1])} for r in cur.fetchall()]
 
 **Çözüm:** Trade/tip bazlı bubbles'ı birleştirmek gerekir.
 
-#### 2. **app.py** - GÜNCELLEME GEREKLİ ❌
+#### 2. **server/main.py** - GÜNCELLEME GEREKLİ ❌
 
-**Problem:** Eski `routes_bubbles` ve `routes_scoring` hala import ediliyor ve kullanılıyor.
+**Problem:** Eski `server/routers/bubbles.py` ve `server/routers/scoring.py` hala import ediliyor ve kullanılıyor.
 
 **Mevcut Kod (Satır 7-8):**
 ```python
-from routes_bubbles import router as bubbles_router
-from routes_scoring import router as scoring_router
+from server.routers.bubbles import router as bubbles_router
+from server.routers.scoring import router as scoring_router
 ```
 
 **Çözüm:** Bu route'lar eski sistem için. Yeni sistemde trade/tip routes'ları kullanacağız.
 
-#### 3. **routes_trades_updated.py** - ✅ UYUMLU
+#### 3. **server/routers/trades.py** - ✅ UYUMLU
 
 **Kontrol Edilen Noktalar:**
 - ✅ `trade_bubbles` tablosuna INSERT yapıyor
@@ -74,7 +82,7 @@ from routes_scoring import router as scoring_router
 - ✅ `DELETE` cascade'i doğru yapıyor
 - ✅ Foreign key constraints doğru
 
-#### 4. **routes_tips_updated.py** - ✅ UYUMLU
+#### 4. **server/routers/tips.py** - ✅ UYUMLU
 
 **Kontrol Edilen Noktalar:**
 - ✅ `tip_bubbles` tablosuna INSERT yapıyor
@@ -83,14 +91,14 @@ from routes_scoring import router as scoring_router
 - ✅ `DELETE` cascade'i doğru yapıyor
 - ✅ Foreign key constraints doğru
 
-#### 5. **routes_coins_updated.py** - ✅ UYUMLU
+#### 5. **server/routers/coins.py** - ✅ UYUMLU
 
 **Kontrol Edilen Noktalar:**
 - ✅ Cascade silme doğru sırada yapılıyor
 - ✅ Trade/tip bazlı bubbles/scoring'leri siliyor
 - ✅ Foreign key constraints doğru
 
-#### 6. **schemas_trades_updated.py** - ✅ UYUMLU
+#### 6. **server/schemas/trades.py** - ✅ UYUMLU
 
 **Kontrol Edilen Noktalar:**
 - ✅ `BubblesData` class'ı doğru
@@ -98,7 +106,7 @@ from routes_scoring import router as scoring_router
 - ✅ `TradeOpen` schema'sında bubbles/scoring optional
 - ✅ `TradeOut` schema'sında bubbles/scoring optional
 
-#### 7. **schemas_tips_updated.py** - ✅ UYUMLU
+#### 7. **server/schemas/tips.py** - ✅ UYUMLU
 
 **Kontrol Edilen Noktalar:**
 - ✅ `BubblesData` class'ı doğru
@@ -110,24 +118,24 @@ from routes_scoring import router as scoring_router
 
 ## 🔧 Gerekli Güncellemeler
 
-### Güncelleme 1: routes_snapshot.py
+### Güncelleme 1: server/routers/snapshot.py
 
 Snapshot endpoint'ini trade/tip bazlı bubbles/scoring ile çalışacak şekilde güncelle.
 
-**Dosya:** `routes_snapshot.py`
+**Dosya:** `server/routers/snapshot.py`
 **Satırlar:** 142-152 ve 155-164
 
 ---
 
-### Güncelleme 2: app.py
+### Güncelleme 2: server/main.py
 
 Eski routes'ları kaldır veya tutmaya devam et (backward compatibility için).
 
 **Seçenek A (Önerilen): Eski routes'ları kaldır**
 ```python
 # Satır 7-8'i sil
-# from routes_bubbles import router as bubbles_router
-# from routes_scoring import router as scoring_router
+# from server.routers.bubbles import router as bubbles_router
+# from server.routers.scoring import router as scoring_router
 
 # Satır 72-73'ü sil
 # app.include_router(bubbles_router)
@@ -324,18 +332,18 @@ psql -d your_database -f migrations/003_trade_tip_bubbles_scoring.sql
 
 ```bash
 # Eski dosyaları yedekle
-cp routes_trades.py routes_trades.py.bak
-cp routes_tips.py routes_tips.py.bak
-cp routes_coins.py routes_coins.py.bak
-cp schemas_trades.py schemas_trades.py.bak
-cp schemas_tips.py schemas_tips.py.bak
+cp server/routers/trades.py server/routers/trades.py.bak
+cp server/routers/tips.py server/routers/tips.py.bak
+cp server/routers/coins.py server/routers/coins.py.bak
+cp server/schemas/trades.py server/schemas/trades.py.bak
+cp server/schemas/tips.py server/schemas/tips.py.bak
 
 # Yeni dosyaları kopyala
-cp routes_trades_updated.py routes_trades.py
-cp routes_tips_updated.py routes_tips.py
-cp routes_coins_updated.py routes_coins.py
-cp schemas_trades_updated.py schemas_trades.py
-cp schemas_tips_updated.py schemas_tips.py
+cp routes_trades_updated.py server/routers/trades.py
+cp routes_tips_updated.py server/routers/tips.py
+cp routes_coins_updated.py server/routers/coins.py
+cp schemas_trades_updated.py server/schemas/trades.py
+cp schemas_tips_updated.py server/schemas/tips.py
 ```
 
 ### Adım 7: Backend'i Yeniden Başlat
@@ -345,7 +353,7 @@ cp schemas_tips_updated.py schemas_tips.py
 Ctrl+C
 
 # Backend'i başlat
-python app.py
+uvicorn server.main:app --reload
 # veya
 uvicorn app:app --reload
 ```
@@ -385,21 +393,21 @@ curl -X DELETE http://localhost:8000/trades/trade_123
 
 | Dosya | Durum | Açıklama |
 |-------|-------|----------|
-| `routes_trades.py` | ⚠️ GÜNCELLE | `routes_trades_updated.py` ile değiştir |
-| `routes_tips.py` | ⚠️ GÜNCELLE | `routes_tips_updated.py` ile değiştir |
-| `routes_coins.py` | ⚠️ GÜNCELLE | `routes_coins_updated.py` ile değiştir |
-| `schemas_trades.py` | ⚠️ GÜNCELLE | `schemas_trades_updated.py` ile değiştir |
-| `schemas_tips.py` | ⚠️ GÜNCELLE | `schemas_tips_updated.py` ile değiştir |
-| `routes_snapshot.py` | ⚠️ GÜNCELLE | Trade/tip bazlı bubbles ile uyumlu hale getir |
-| `app.py` | ⚠️ KONTROL | Eski routes'ları kaldır veya tut (seçim yap) |
-| `routes_bubbles.py` | ✅ TUTABILIR | Eski sistem için (isteğe bağlı) |
-| `routes_scoring.py` | ✅ TUTABILIR | Eski sistem için (isteğe bağlı) |
+| `server/routers/trades.py` | ?? G?NCELLE | G?ncel dosyay? bu path'e yerle?tir |
+| `server/routers/tips.py` | ?? G?NCELLE | G?ncel dosyay? bu path'e yerle?tir |
+| `server/routers/coins.py` | ?? G?NCELLE | G?ncel dosyay? bu path'e yerle?tir |
+| `server/schemas/trades.py` | ?? G?NCELLE | G?ncel dosyay? bu path'e yerle?tir |
+| `server/schemas/tips.py` | ?? G?NCELLE | G?ncel dosyay? bu path'e yerle?tir |
+| `server/routers/snapshot.py` | ⚠️ GÜNCELLE | Trade/tip bazlı bubbles ile uyumlu hale getir |
+| `server/main.py` | ⚠️ KONTROL | Eski routes'ları kaldır veya tut (seçim yap) |
+| `server/routers/bubbles.py` | ✅ TUTABILIR | Eski sistem için (isteğe bağlı) |
+| `server/routers/scoring.py` | ✅ TUTABILIR | Eski sistem için (isteğe bağlı) |
 
 ---
 
 ## ⚠️ Önemli Notlar
 
-1. **Backward Compatibility:** Eski `routes_bubbles` ve `routes_scoring` tutulabilir (eski API'ler çalışmaya devam eder)
+1. **Backward Compatibility:** Eski `server/routers/bubbles.py` ve `server/routers/scoring.py` tutulabilir (eski API'ler çalışmaya devam eder)
 2. **Cascade Silme:** Foreign Key constraints otomatik cascade silme sağlıyor
 3. **Views:** `v_trades_pnl` ve `v_tip_gain_loss` views'ları doğru çalışıyor
 4. **Migration Sırası:** 001 → 002 → 003 sırasında çalıştırılmalı
