@@ -5,6 +5,7 @@ import { apiJson } from "../../lib/api";
 import type { CoinDetail, CoinSummary } from "../../lib/types";
 import Link from "next/link";
 import Image from "next/image";
+import LoadingScreen from "../../components/LoadingScreen";
 
 function errMsg(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -147,6 +148,8 @@ export default function CoinsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copiedCa, setCopiedCa] = useState<string | null>(null);
+  const [initialReady, setInitialReady] = useState(false);
+  const initialReadyRef = useRef(false);
 
   const [q, setQ] = useState("");
 
@@ -168,6 +171,10 @@ export default function CoinsPage() {
       setError(errMsg(e));
     } finally {
       setLoading(false);
+      if (!initialReadyRef.current) {
+        initialReadyRef.current = true;
+        setInitialReady(true);
+      }
     }
   }
 
@@ -290,6 +297,15 @@ export default function CoinsPage() {
   }
 
   const LOGO_PX = 32;
+
+  if (!initialReady) {
+    return (
+      <LoadingScreen
+        title="Coinler yukleniyor"
+        subtitle="Liste hazirlaniyor"
+      />
+    );
+  }
 
   return (
     <main className="mx-auto w-full max-w-6xl p-4 md:p-6">

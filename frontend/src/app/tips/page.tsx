@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { apiGet, apiJson } from "@/lib/api";
 import Image from "next/image";
 import { FaXTwitter, FaTelegram } from "react-icons/fa6";
+import LoadingScreen from "@/components/LoadingScreen";
 
 type TipRow = {
   tip_id: number;
@@ -202,6 +203,8 @@ export default function TipsPage() {
   const [err, setErr] = useState<string | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState<number | null>(null);
+  const [initialReady, setInitialReady] = useState(false);
+  const initialReadyRef = useRef(false);
 
   const [q, setQ] = useState("");
   const [qDebounced, setQDebounced] = useState("");
@@ -258,6 +261,10 @@ export default function TipsPage() {
       setErr(errMsg(e));
     } finally {
       setLoading(false);
+      if (!initialReadyRef.current) {
+        initialReadyRef.current = true;
+        setInitialReady(true);
+      }
     }
   }
 
@@ -479,6 +486,15 @@ export default function TipsPage() {
 
   const isFiltered = q.trim() !== "" || platformFilter !== "all";
   const LOGO_PX = 40;
+
+  if (!initialReady) {
+    return (
+      <LoadingScreen
+        title="Tips yukleniyor"
+        subtitle="Liste hazirlaniyor"
+      />
+    );
+  }
 
   return (
     <main className="grid gap-4">

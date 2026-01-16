@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiGet, apiJson } from "@/lib/api";
+import LoadingScreen from "@/components/LoadingScreen";
 
 type Context = { active_ca: string | null };
 
@@ -18,6 +19,8 @@ export default function ScoringPage() {
   const [rows, setRows] = useState<ScoreRow[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [initialReady, setInitialReady] = useState(false);
+  const initialReadyRef = useRef(false);
 
   async function refresh(): Promise<void> {
     setErr(null);
@@ -36,6 +39,11 @@ export default function ScoringPage() {
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setErr(msg);
+    } finally {
+      if (!initialReadyRef.current) {
+        initialReadyRef.current = true;
+        setInitialReady(true);
+      }
     }
   }
 
@@ -64,6 +72,15 @@ export default function ScoringPage() {
   useEffect(() => {
     void refresh();
   }, []);
+
+  if (!initialReady) {
+    return (
+      <LoadingScreen
+        title="Scoring yukleniyor"
+        subtitle="Liste hazirlaniyor"
+      />
+    );
+  }
 
   return (
     <div>

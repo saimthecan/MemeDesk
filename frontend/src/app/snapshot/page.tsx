@@ -1,13 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiGet } from "@/lib/api";
+import LoadingScreen from "@/components/LoadingScreen";
 
 type Snapshot = Record<string, unknown>;
 
 export default function SnapshotPage() {
   const [txt, setTxt] = useState<string>("");
   const [err, setErr] = useState<string | null>(null);
+  const [initialReady, setInitialReady] = useState(false);
+  const initialReadyRef = useRef(false);
 
   async function load(): Promise<void> {
     setErr(null);
@@ -17,6 +20,11 @@ export default function SnapshotPage() {
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setErr(msg);
+    } finally {
+      if (!initialReadyRef.current) {
+        initialReadyRef.current = true;
+        setInitialReady(true);
+      }
     }
   }
 
@@ -28,6 +36,15 @@ export default function SnapshotPage() {
   useEffect(() => {
     void load();
   }, []); // burada disable gerekmez
+
+  if (!initialReady) {
+    return (
+      <LoadingScreen
+        title="Snapshot yukleniyor"
+        subtitle="Veri hazirlaniyor"
+      />
+    );
+  }
 
   return (
     <div>

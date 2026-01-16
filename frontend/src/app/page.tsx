@@ -6,6 +6,7 @@ import { apiJson } from "../lib/api";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { FaXTwitter, FaTelegram } from "react-icons/fa6";
+import LoadingScreen from "../components/LoadingScreen";
 
 type TokenMeta = {
   name: string | null;
@@ -406,6 +407,8 @@ export default function WorkspaceDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [warmingUp, setWarmingUp] = useState(false);
   const [warmupMsg, setWarmupMsg] = useState<string | null>(null);
+  const [initialReady, setInitialReady] = useState(false);
+  const initialReadyRef = useRef(false);
 
   // logo cache
   const [logoByCa, setLogoByCa] = useState<Record<string, string>>({});
@@ -428,6 +431,10 @@ export default function WorkspaceDashboard() {
       setError(errMsg(e));
     } finally {
       setLoading(false);
+      if (!initialReadyRef.current) {
+        initialReadyRef.current = true;
+        setInitialReady(true);
+      }
     }
   }
 
@@ -802,6 +809,15 @@ async function downloadSnapshot(): Promise<void> {
   const openTradesCount = useMemo(() => {
     return coins.reduce((acc, c) => acc + (c.trades_open || 0), 0);
   }, [coins]);
+
+  if (!initialReady) {
+    return (
+      <LoadingScreen
+        title="Dashboard yukleniyor"
+        subtitle="Ozet ve listeler hazirlaniyor"
+      />
+    );
+  }
 
   return (
     <main className="grid gap-4">

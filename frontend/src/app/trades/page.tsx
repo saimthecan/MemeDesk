@@ -10,6 +10,7 @@ import {
 } from "react";
 import { apiGet, apiJson } from "@/lib/api";
 import Image from "next/image";
+import LoadingScreen from "@/components/LoadingScreen";
 
 type TradeRow = {
   id: number;
@@ -231,6 +232,8 @@ export default function TradesPage() {
   const [totalCount, setTotalCount] = useState<number | null>(null);
   const [openCount, setOpenCount] = useState<number | null>(null);
   const [closedCount, setClosedCount] = useState<number | null>(null);
+  const [initialReady, setInitialReady] = useState(false);
+  const initialReadyRef = useRef(false);
 
   const [q, setQ] = useState("");
   const [qDebounced, setQDebounced] = useState("");
@@ -294,6 +297,10 @@ export default function TradesPage() {
       setErr(errMsg(e));
     } finally {
       setLoading(false);
+      if (!initialReadyRef.current) {
+        initialReadyRef.current = true;
+        setInitialReady(true);
+      }
     }
   }, [PAGE_SIZE, qDebounced, scope]);
 
@@ -499,6 +506,15 @@ export default function TradesPage() {
 
 
   const LOGO_PX = 32;
+
+  if (!initialReady) {
+    return (
+      <LoadingScreen
+        title="Trades yukleniyor"
+        subtitle="Kayitlar hazirlaniyor"
+      />
+    );
+  }
 
   return (
     <main className="grid gap-4">

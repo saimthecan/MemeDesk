@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { apiGet, apiJson } from "@/lib/api";
+import LoadingScreen from "@/components/LoadingScreen";
 
 type Context = { active_ca: string | null };
 
@@ -24,6 +25,8 @@ export default function BubblesPage() {
   const [others, setOthers] = useState<Row[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [initialReady, setInitialReady] = useState(false);
+  const initialReadyRef = useRef(false);
 
   const clustersSorted = useMemo(
     () => [...clusters].sort((a, b) => a.rank - b.rank),
@@ -59,6 +62,11 @@ export default function BubblesPage() {
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       setErr(msg);
+    } finally {
+      if (!initialReadyRef.current) {
+        initialReadyRef.current = true;
+        setInitialReady(true);
+      }
     }
   }
 
@@ -135,6 +143,15 @@ export default function BubblesPage() {
   useEffect(() => {
     void refresh();
   }, []);
+
+  if (!initialReady) {
+    return (
+      <LoadingScreen
+        title="Bubbles yukleniyor"
+        subtitle="Aktif coin kontrol ediliyor"
+      />
+    );
+  }
 
   return (
     <div>
