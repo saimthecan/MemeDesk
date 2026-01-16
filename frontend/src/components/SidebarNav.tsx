@@ -6,8 +6,8 @@ import { useState } from "react";
 const nav = [
   { href: "/", label: "Dashboard" },
   { href: "/coins", label: "Coins" },
-  { href: "/trades", label: "Trades" },
-  { href: "/tips", label: "Tips" },
+  { href: "/trades", label: "Benim Trade'lerim" },
+  { href: "/tips", label: "Alpha Calls" },
 ];
 
 export default function SidebarNav() {
@@ -25,7 +25,7 @@ export default function SidebarNav() {
           onClick={() => setOpen((v) => !v)}
           aria-expanded={open}
           aria-controls="mobile-nav"
-          aria-label={open ? "Menu kapat" : "Menu ac"}
+          aria-label={open ? "Men? kapat" : "Men? a?"}
         >
           <span className="flex flex-col items-center gap-1">
             <span className="h-0.5 w-4 rounded-full bg-zinc-200" />

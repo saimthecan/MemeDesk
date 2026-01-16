@@ -11,6 +11,7 @@ import {
 import { apiGet, apiJson } from "@/lib/api";
 import Image from "next/image";
 import LoadingScreen from "@/components/LoadingScreen";
+import ActionOverlay from "@/components/ActionOverlay";
 
 type TradeRow = {
   id: number;
@@ -185,8 +186,16 @@ function Modal(props: {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  size?: "sm" | "md" | "lg";
 }) {
   if (!props.open) return null;
+
+  const sizeClass =
+    props.size === "sm"
+      ? "max-w-md"
+      : props.size === "lg"
+      ? "max-w-4xl"
+      : "max-w-2xl";
 
   return (
     <div
@@ -195,7 +204,9 @@ function Modal(props: {
         if (e.target === e.currentTarget) props.onClose();
       }}
     >
-      <div className="w-full max-w-2xl rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl">
+      <div
+        className={`w-full ${sizeClass} rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl`}
+      >
         <div className="flex items-center justify-between gap-3 border-b border-zinc-800 px-5 py-4">
           <div className="text-base font-semibold text-zinc-100">
             {props.title}
@@ -250,6 +261,8 @@ export default function TradesPage() {
   const [editTradeId, setEditTradeId] = useState<string>("");
   const [editExitMcap, setEditExitMcap] = useState<string>("");
   const [editExitReason, setEditExitReason] = useState<string>("");
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteTradeId, setDeleteTradeId] = useState<string | null>(null);
 
   const refresh = useCallback(async (): Promise<void> => {
     setLoading(true);
@@ -414,7 +427,11 @@ export default function TradesPage() {
 
   function openCloseModal(trade: TradeRow) {
     setCloseTradeId(trade.trade_id);
-    setExitMcap(trade.entry_mcap_usd ? String(trade.entry_mcap_usd) : "");
+    setExitMcap(
+      trade.entry_mcap_usd != null
+        ? String(Math.round(trade.entry_mcap_usd))
+        : ""
+    );
     setExitReason("");
     setCloseOpen(true);
   }
@@ -439,8 +456,7 @@ export default function TradesPage() {
     setErr(null);
 
     try {
-      await apiJson("/trades/close", "POST", {
-        trade_id: closeTradeId,
+      await apiJson(`/trades/${encodeURIComponent(closeTradeId)}/close`, "POST", {
         exit_mcap_usd: ex,
         exit_reason: exitReason.trim() ? exitReason.trim() : null,
       });
@@ -485,17 +501,21 @@ export default function TradesPage() {
     }
   }
 
-  async function deleteTrade(tradeId: string): Promise<void> {
-    if (!confirm(`Emin misiniz? Bu trade silinecek: ${tradeId}`)) {
-      return;
-    }
+  function requestDeleteTrade(tradeId: string): void {
+    setDeleteTradeId(tradeId);
+    setDeleteOpen(true);
+  }
 
+  async function confirmDeleteTrade(): Promise<void> {
+    if (!deleteTradeId) return;
     setLoading(true);
     setErr(null);
 
     try {
-      await apiJson(`/trades/${encodeURIComponent(tradeId)}`, "DELETE");
+      await apiJson(`/trades/${encodeURIComponent(deleteTradeId)}`, "DELETE");
       await refresh();
+      setDeleteOpen(false);
+      setDeleteTradeId(null);
     } catch (e: unknown) {
       setErr(errMsg(e));
     } finally {
@@ -510,17 +530,22 @@ export default function TradesPage() {
   if (!initialReady) {
     return (
       <LoadingScreen
-        title="Trades yukleniyor"
-        subtitle="Kayitlar hazirlaniyor"
+        title="Trade'lerim yükleniyor"
+        subtitle="Kayıtlar hazırlanıyor"
       />
     );
   }
 
   return (
-    <main className="grid gap-4">
+    <main className="relative grid gap-4">
+      <ActionOverlay
+        show={loading}
+        title="İşlem yapılıyor"
+        subtitle="Trade listesi güncelleniyor"
+      />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-zinc-100">Trades</h1>
+          <h1 className="text-xl font-semibold text-zinc-100">Benim Trade&apos;lerim</h1>
           <p className="text-sm text-zinc-400">
             Burada sadece <span className="text-zinc-200">trade</span> kayıtları
             var (açık + kapalı).
@@ -561,7 +586,7 @@ export default function TradesPage() {
           <div className="flex flex-wrap items-center gap-2">
             <input
               className="w-72 max-w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-2 text-sm outline-none focus:border-zinc-600"
-              placeholder="Ara: coin / CA / trade_id"
+              placeholder="Ara: coin / CA"
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
@@ -661,7 +686,7 @@ export default function TradesPage() {
                               : "border-rose-900/40 bg-rose-950/40 text-rose-200",
                           ].join(" ")}
                         >
-                          {isOpen ? "Acik" : "Kapali"}
+                          {isOpen ? "Açık" : "Kapalı"}
                         </span>
                       </div>
                     </div>
@@ -690,7 +715,7 @@ export default function TradesPage() {
                     </div>
 
                     <div className="rounded-xl border border-zinc-800/70 bg-zinc-950/50 px-3 py-2">
-                      <div className="text-[11px] text-zinc-500">Cikis</div>
+                      <div className="text-[11px] text-zinc-500">Çıkış</div>
                       <div
                         className="mt-0.5 text-sm font-semibold tabular-nums text-zinc-100"
                         title={fmtUsdTR(t.exit_mcap_usd)}
@@ -715,7 +740,7 @@ export default function TradesPage() {
                         {fmtPctSigned(t.pnl_pct)}
                       </div>
                       <div className="mt-0.5 text-xs text-zinc-400 tabular-nums">
-                        Kar: {t.pnl_usd == null ? "-" : fmtUsdFull(t.pnl_usd)}
+                        Kar/Zarar: {t.pnl_usd == null ? "-" : fmtUsdFull(t.pnl_usd)}
                       </div>
                       <div className="mt-0.5 text-xs text-zinc-400">
                         Neden: {t.exit_reason?.trim() ? t.exit_reason : "-"}
@@ -742,7 +767,7 @@ export default function TradesPage() {
                     </button>
                     <button
                       className="h-7 flex-1 rounded-lg border border-red-900/40 bg-red-950/40 px-2.5 py-1 text-[11px] text-red-100 hover:bg-red-900/60 text-center md:w-20 md:flex-none"
-                      onClick={() => deleteTrade(t.trade_id)}
+                      onClick={() => requestDeleteTrade(t.trade_id)}
                       type="button"
                     >
                       Sil
@@ -756,7 +781,7 @@ export default function TradesPage() {
 
           {filtered.length === 0 ? (
             <div className="rounded-2xl border border-zinc-800 bg-zinc-950/40 px-4 py-8 text-center text-zinc-400">
-              Kayit yok.
+              Kayıt yok.
             </div>
           ) : null}
 
@@ -782,18 +807,18 @@ export default function TradesPage() {
       >
         <div className="grid gap-3">
           <label className="grid gap-1 text-sm">
-            <span className="text-zinc-300">Exit MCAP (USD)</span>
+            <span className="text-zinc-300">Çıkış MCAP (USD)</span>
             <input
               className="rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-2 text-sm outline-none focus:border-zinc-600"
-              value={exitMcap}
-              onChange={(e) => setExitMcap(e.target.value)}
+              value={fmtDigitsTR(exitMcap)}
+              onChange={(e) => setExitMcap(e.target.value.replace(/\D/g, ""))}
               inputMode="numeric"
               placeholder="500000"
             />
           </label>
 
           <label className="grid gap-1 text-sm">
-            <span className="text-zinc-300">Exit reason (opsiyonel)</span>
+            <span className="text-zinc-300">Çıkış Nedeni (opsiyonel)</span>
             <input
               className="rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-2 text-sm outline-none focus:border-zinc-600"
               value={exitReason}
@@ -823,13 +848,51 @@ export default function TradesPage() {
       </Modal>
 
       <Modal
+        open={deleteOpen}
+        title="Trade sil"
+        size="sm"
+        onClose={() => {
+          if (loading) return;
+          setDeleteOpen(false);
+          setDeleteTradeId(null);
+        }}
+      >
+        <div className="grid gap-4">
+          <div className="rounded-xl border border-red-900/40 bg-red-950/40 p-3 text-sm text-red-100">
+            Bu trade silinecek. Bu işlem geri alinamaz.
+          </div>
+          <div className="flex items-center justify-end gap-2">
+            <button
+              className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm hover:bg-zinc-800"
+              onClick={() => {
+                setDeleteOpen(false);
+                setDeleteTradeId(null);
+              }}
+              type="button"
+              disabled={loading}
+            >
+              Vazgec
+            </button>
+            <button
+              className="rounded-xl border border-red-900/40 bg-red-950/40 px-4 py-2 text-sm text-red-100 hover:bg-red-900/60 disabled:opacity-60"
+              onClick={() => void confirmDeleteTrade()}
+              type="button"
+              disabled={loading}
+            >
+              {loading ? "Siliniyor..." : "Sil"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
         open={editOpen}
-        title="Trade duzenle"
+        title="Trade düzenle"
         onClose={() => setEditOpen(false)}
       >
         <div className="grid gap-3">
           <label className="grid gap-1 text-sm">
-            <span className="text-zinc-300">Exit MCAP (USD)</span>
+            <span className="text-zinc-300">Çıkış MCAP (USD)</span>
             <input
               className="rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-2 text-sm outline-none focus:border-zinc-600"
               value={fmtDigitsTR(editExitMcap)}
@@ -842,7 +905,7 @@ export default function TradesPage() {
           </label>
 
           <label className="grid gap-1 text-sm">
-            <span className="text-zinc-300">Exit reason (opsiyonel)</span>
+            <span className="text-zinc-300">Çıkış Nedeni (opsiyonel)</span>
             <input
               className="rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-2 text-sm outline-none focus:border-zinc-600"
               value={editExitReason}

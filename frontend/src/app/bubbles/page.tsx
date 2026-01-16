@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { apiGet, apiJson } from "@/lib/api";
 import LoadingScreen from "@/components/LoadingScreen";
+import ActionOverlay from "@/components/ActionOverlay";
 
 type Context = { active_ca: string | null };
 
@@ -147,14 +148,19 @@ export default function BubblesPage() {
   if (!initialReady) {
     return (
       <LoadingScreen
-        title="Bubbles yukleniyor"
+        title="Bubbles yükleniyor"
         subtitle="Aktif coin kontrol ediliyor"
       />
     );
   }
 
   return (
-    <div>
+    <div className="relative">
+      <ActionOverlay
+        show={busy}
+        title="İşlem yapılıyor"
+        subtitle="Bubbles kaydediliyor"
+      />
       <h3>Bubbles</h3>
 
       {err && <pre style={{ color: "crimson", whiteSpace: "pre-wrap" }}>{err}</pre>}

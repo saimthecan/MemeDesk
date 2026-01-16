@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { FaXTwitter, FaTelegram } from "react-icons/fa6";
 import LoadingScreen from "../components/LoadingScreen";
+import ActionOverlay from "../components/ActionOverlay";
 
 type TokenMeta = {
   name: string | null;
@@ -496,7 +497,7 @@ export default function WorkspaceDashboard() {
         `/dexscreener/token_meta?ca=${encodeURIComponent(caQ)}`
       );
 
-      // daha yeni bir request başladıysa eski sonucu ignore et
+      // daha yeni bir request başladıysa eski sonuçu ignore et
       if (reqId !== metaReqRef.current) return;
 
       setMeta(m);
@@ -639,8 +640,7 @@ export default function WorkspaceDashboard() {
     setLoading(true);
     setError(null);
     try {
-      await apiJson("/trades/close", "POST", {
-        trade_id: closeTradeId,
+      await apiJson(`/trades/${encodeURIComponent(closeTradeId)}/close`, "POST", {
         exit_mcap_usd: ex,
         exit_reason: exitReason || null,
       });
@@ -810,17 +810,29 @@ async function downloadSnapshot(): Promise<void> {
     return coins.reduce((acc, c) => acc + (c.trades_open || 0), 0);
   }, [coins]);
 
+  const closedTradesCount = useMemo(() => {
+    return coins.reduce(
+      (acc, c) => acc + Math.max(0, (c.trades_total || 0) - (c.trades_open || 0)),
+      0
+    );
+  }, [coins]);
+
   if (!initialReady) {
     return (
       <LoadingScreen
-        title="Dashboard yukleniyor"
-        subtitle="Ozet ve listeler hazirlaniyor"
+        title="Dashboard yükleniyor"
+        subtitle="Özet ve listeler hazırlanıyor"
       />
     );
   }
 
   return (
-    <main className="grid gap-4">
+    <main className="relative grid gap-4">
+      <ActionOverlay
+        show={loading}
+        title="İşlem yapılıyor"
+        subtitle="Liste güncelleniyor"
+      />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-zinc-100">Dashboard</h1>
@@ -949,7 +961,7 @@ async function downloadSnapshot(): Promise<void> {
                 disabled={!ca}
                 type="button"
               >
-                Influencer ekle
+                Alpha Call ekle
               </button>
             </div>
           </div>
@@ -967,15 +979,24 @@ async function downloadSnapshot(): Promise<void> {
               </div>
             </div>
 
-            <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
-              <div className="text-xs text-zinc-400">Açık trade</div>
-              <div className="mt-1 text-lg font-semibold text-zinc-100">
-                {openTradesCount}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
+                <div className="text-xs text-zinc-400">Açık tradeler</div>
+                <div className="mt-1 text-lg font-semibold text-zinc-100">
+                  {openTradesCount}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
+                <div className="text-xs text-zinc-400">Tamamlanmış tradeler</div>
+                <div className="mt-1 text-lg font-semibold text-zinc-100">
+                  {closedTradesCount}
+                </div>
               </div>
             </div>
 
             <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
-              <div className="text-xs text-zinc-400">Toplam tip</div>
+              <div className="text-xs text-zinc-400">Toplam Alpha Calls</div>
               <div className="mt-1 text-lg font-semibold text-zinc-100">
                 {tips.length}
               </div>
@@ -987,7 +1008,7 @@ async function downloadSnapshot(): Promise<void> {
         <section className="col-span-12 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-base font-semibold text-zinc-100">
-              Açık Trades ({openTrades.length})
+              Açık Trade&apos;lerim ({openTrades.length})
             </h2>
           </div>
 
@@ -1110,7 +1131,7 @@ async function downloadSnapshot(): Promise<void> {
         <section className="col-span-12 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-base font-semibold text-zinc-100">
-              Influencer ({tips.length})
+              Alpha Calls ({tips.length})
             </h2>
           </div>
 
@@ -1284,7 +1305,16 @@ async function downloadSnapshot(): Promise<void> {
         {/* Snapshot */}
         <section className="col-span-12 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-base font-semibold text-zinc-100">Snapshot</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-base font-semibold text-zinc-100">Snapshot</h2>
+              <span
+                title="Snapshot, açık trade ve alpha calls gibi anlık verilerin ham JSON kaydıdır."
+                className="inline-flex h-5 w-5 cursor-pointer items-center justify-center rounded-full border border-zinc-700 bg-slate-950 text-xs font-semibold text-zinc-200"
+                aria-label="Snapshot info"
+              >
+                i
+              </span>
+            </div>
           </div>
 <div className="mt-3 flex flex-wrap items-center gap-2">
   {/* Checkbox her zaman görünsün */}
@@ -1426,10 +1456,10 @@ async function downloadSnapshot(): Promise<void> {
         </div>
       </Modal>
 
-      {/* Influencer modal */}
+      {/* Alpha Call modal */}
       <Modal
         open={infOpen}
-        title="Influencer ekle"
+        title="Alpha Call ekle"
         onClose={() => setInfOpen(false)}
       >
         <div className="grid gap-4">

@@ -40,15 +40,39 @@ export default function SnapshotPage() {
   if (!initialReady) {
     return (
       <LoadingScreen
-        title="Snapshot yukleniyor"
-        subtitle="Veri hazirlaniyor"
+        title="Snapshot yükleniyor"
+        subtitle="Veri hazırlanıyor"
       />
     );
   }
 
   return (
     <div>
-      <h3>Assistant Snapshot</h3>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <h3 style={{ margin: 0 }}>Assistant Snapshot</h3>
+        <span
+          title="Snapshot, açık trade ve alpha calls gibi anlık verilerin ham JSON kaydıdır."
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: 20,
+            height: 20,
+            borderRadius: "50%",
+            border: "1px solid #3f3f46",
+            background: "#0f172a",
+            color: "#e5e7eb",
+            fontSize: 12,
+            fontWeight: 600,
+            lineHeight: "20px",
+            cursor: "pointer",
+            userSelect: "none",
+          }}
+          aria-label="Snapshot info"
+        >
+          i
+        </span>
+      </div>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
         <button onClick={() => void load()}>Refresh</button>

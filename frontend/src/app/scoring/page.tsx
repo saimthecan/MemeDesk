@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { apiGet, apiJson } from "@/lib/api";
 import LoadingScreen from "@/components/LoadingScreen";
+import ActionOverlay from "@/components/ActionOverlay";
 
 type Context = { active_ca: string | null };
 
@@ -76,14 +77,19 @@ export default function ScoringPage() {
   if (!initialReady) {
     return (
       <LoadingScreen
-        title="Scoring yukleniyor"
-        subtitle="Liste hazirlaniyor"
+        title="Scoring yükleniyor"
+        subtitle="Liste hazırlanıyor"
       />
     );
   }
 
   return (
-    <div>
+    <div className="relative">
+      <ActionOverlay
+        show={busy}
+        title="İşlem yapılıyor"
+        subtitle="Skor kaydediliyor"
+      />
       <h3>Scoring</h3>
 
       {err && <pre style={{ color: "crimson", whiteSpace: "pre-wrap" }}>{err}</pre>}

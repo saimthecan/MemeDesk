@@ -6,6 +6,7 @@ import type { CoinDetail, CoinSummary } from "../../lib/types";
 import Link from "next/link";
 import Image from "next/image";
 import LoadingScreen from "../../components/LoadingScreen";
+import ActionOverlay from "../../components/ActionOverlay";
 
 function errMsg(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -118,8 +119,15 @@ function Modal(props: {
   title: string;
   onClose: () => void;
   children: React.ReactNode;
+  size?: "sm" | "md" | "lg";
 }) {
   if (!props.open) return null;
+  const sizeClass =
+    props.size === "sm"
+      ? "max-w-md"
+      : props.size === "md"
+      ? "max-w-2xl"
+      : "max-w-5xl";
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
@@ -127,7 +135,9 @@ function Modal(props: {
         if (e.target === e.currentTarget) props.onClose();
       }}
     >
-      <div className="w-full max-w-5xl rounded-2xl border border-zinc-800 bg-zinc-950 p-4 shadow-2xl">
+      <div
+        className={`w-full ${sizeClass} rounded-2xl border border-zinc-800 bg-zinc-950 p-4 shadow-2xl`}
+      >
         <div className="flex items-center justify-between gap-3">
           <h2 className="m-0 text-lg font-semibold">{props.title}</h2>
           <button
@@ -156,6 +166,8 @@ export default function CoinsPage() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [detail, setDetail] = useState<CoinDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<CoinSummary | null>(null);
 
   // logo cache
   const [logoByCa, setLogoByCa] = useState<Record<string, string>>({});
@@ -280,15 +292,21 @@ export default function CoinsPage() {
     }
   }
 
-  async function deleteCoin(ca: string) {
-    if (!confirm(`Emin misiniz? Bu coin ve tüm trades/tips silinecek: ${ca}`)) {
-      return;
-    }
+
+  function requestDeleteCoin(coin: CoinSummary): void {
+    setDeleteTarget(coin);
+    setDeleteOpen(true);
+  }
+
+  async function confirmDeleteCoin(): Promise<void> {
+    if (!deleteTarget) return;
     setLoading(true);
     setError(null);
     try {
-      await apiJson(`/coins/${encodeURIComponent(ca)}`, "DELETE");
+      await apiJson(`/coins/${encodeURIComponent(deleteTarget.ca)}`, "DELETE");
       await refreshCoins();
+      setDeleteOpen(false);
+      setDeleteTarget(null);
     } catch (e: unknown) {
       setError(errMsg(e));
     } finally {
@@ -296,19 +314,25 @@ export default function CoinsPage() {
     }
   }
 
+
   const LOGO_PX = 32;
 
   if (!initialReady) {
     return (
       <LoadingScreen
-        title="Coinler yukleniyor"
-        subtitle="Liste hazirlaniyor"
+        title="Coinler yükleniyor"
+        subtitle="Liste hazırlanıyor"
       />
     );
   }
 
   return (
-    <main className="mx-auto w-full max-w-6xl p-4 md:p-6">
+    <main className="relative mx-auto w-full max-w-6xl p-4 md:p-6">
+      <ActionOverlay
+        show={loading}
+        title="İşlem yapılıyor"
+        subtitle="Coin listesi güncelleniyor"
+      />
       <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Tüm Coinler</h1>
@@ -357,8 +381,8 @@ export default function CoinsPage() {
           <thead className="bg-zinc-900/60 text-left text-xs text-zinc-300">
             <tr>
               <th className="border-b p-3">Coin</th>
-              <th className="border-b p-3">Trades</th>
-              <th className="border-b p-3">Tips</th>
+              <th className="border-b p-3">Trade&apos;lerim</th>
+              <th className="border-b p-3">Alpha Calls</th>
               <th className="border-b p-3">Launch</th>
               <th className="border-b p-3"></th>
             </tr>
@@ -462,7 +486,7 @@ export default function CoinsPage() {
                       </button>
                       <button
                         className="rounded-lg border border-red-900/40 bg-red-950/40 px-3 py-2 text-xs text-red-100 hover:bg-red-900/60"
-                        onClick={() => deleteCoin(c.ca)}
+                        onClick={() => requestDeleteCoin(c)}
                       >
                         Sil
                       </button>
@@ -500,6 +524,51 @@ export default function CoinsPage() {
         ) : (
           <div className="p-2 text-sm text-gray-600">Detay yok.</div>
         )}
+      </Modal>
+
+      <Modal
+        open={deleteOpen}
+        title="Coin sil"
+        size="sm"
+        onClose={() => {
+          if (loading) return;
+          setDeleteOpen(false);
+          setDeleteTarget(null);
+        }}
+      >
+        <div className="grid gap-4">
+          <div className="rounded-xl border border-red-900/40 bg-red-950/40 p-3 text-sm text-red-100">
+            Bu coin ve bagli trade/tip kayıtlari silinecek. Bu işlem geri
+            alinamaz.
+          </div>
+          <div className="text-sm text-zinc-300">
+            Coin:{" "}
+            <span className="font-semibold">
+              {deleteTarget?.name ?? "-"}
+            </span>
+          </div>
+          <div className="flex items-center justify-end gap-2">
+            <button
+              className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm hover:bg-zinc-800"
+              onClick={() => {
+                setDeleteOpen(false);
+                setDeleteTarget(null);
+              }}
+              type="button"
+              disabled={loading}
+            >
+              Vazgec
+            </button>
+            <button
+              className="rounded-xl border border-red-900/40 bg-red-950/40 px-4 py-2 text-sm text-red-100 hover:bg-red-900/60 disabled:opacity-60"
+              onClick={() => void confirmDeleteCoin()}
+              type="button"
+              disabled={loading}
+            >
+              {loading ? "Siliniyor..." : "Sil"}
+            </button>
+          </div>
+        </div>
       </Modal>
     </main>
   );

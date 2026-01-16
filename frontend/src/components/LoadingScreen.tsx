@@ -6,8 +6,8 @@ type LoadingScreenProps = {
 };
 
 export default function LoadingScreen({
-  title = "Yukleniyor",
-  subtitle = "Veriler hazirlaniyor",
+  title = "Yükleniyor",
+  subtitle = "Veriler hazırlanıyor",
 }: LoadingScreenProps) {
   return (
     <div className="relative min-h-[320px] overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950/60 p-6">

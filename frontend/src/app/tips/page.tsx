@@ -1,10 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { apiGet, apiJson } from "@/lib/api";
 import Image from "next/image";
 import { FaXTwitter, FaTelegram } from "react-icons/fa6";
 import LoadingScreen from "@/components/LoadingScreen";
+import ActionOverlay from "@/components/ActionOverlay";
 
 type TipRow = {
   tip_id: number;
@@ -157,8 +165,15 @@ function Modal(props: {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  size?: "sm" | "md" | "lg";
 }) {
   if (!props.open) return null;
+  const sizeClass =
+    props.size === "sm"
+      ? "max-w-md"
+      : props.size === "lg"
+      ? "max-w-4xl"
+      : "max-w-2xl";
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
@@ -166,7 +181,9 @@ function Modal(props: {
         if (e.target === e.currentTarget) props.onClose();
       }}
     >
-      <div className="w-full max-w-2xl rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl">
+      <div
+        className={`w-full ${sizeClass} rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl`}
+      >
         <div className="flex items-center justify-between gap-3 border-b border-zinc-800 px-5 py-4">
           <div className="text-base font-semibold text-zinc-100">
             {props.title}
@@ -219,8 +236,10 @@ export default function TipsPage() {
   const [peakMcap, setPeakMcap] = useState<string>("");
   const [troughMcap, setTroughMcap] = useState<string>("");
   const [rugFlag, setRugFlag] = useState<string>("0"); // "0", "1"
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteTipId, setDeleteTipId] = useState<number | null>(null);
 
-  async function refresh(): Promise<void> {
+  const refresh = useCallback(async (): Promise<void> => {
     setLoading(true);
     setErr(null);
     setNextCursor(null);
@@ -266,7 +285,7 @@ export default function TipsPage() {
         setInitialReady(true);
       }
     }
-  }
+  }, [PAGE_SIZE, qDebounced]);
 
   async function loadMore(): Promise<void> {
     if (!nextCursor || loadingMore) return;
@@ -289,7 +308,7 @@ export default function TipsPage() {
 
   useEffect(() => {
     void refresh();
-  }, [qDebounced]);
+  }, [refresh]);
 
   useEffect(() => {
     const t = setTimeout(() => setQDebounced(q), 250);
@@ -466,17 +485,21 @@ export default function TipsPage() {
     }
   }
 
-  async function deleteTip(tipId: number): Promise<void> {
-    if (!confirm(`Emin misiniz? Bu tip silinecek: ${tipId}`)) {
-      return;
-    }
+  function requestDeleteTip(tipId: number): void {
+    setDeleteTipId(tipId);
+    setDeleteOpen(true);
+  }
 
+  async function confirmDeleteTip(): Promise<void> {
+    if (deleteTipId == null) return;
     setLoading(true);
     setErr(null);
 
     try {
-      await apiJson(`/tips/${tipId}`, "DELETE");
+      await apiJson(`/tips/${deleteTipId}`, "DELETE");
       await refresh();
+      setDeleteOpen(false);
+      setDeleteTipId(null);
     } catch (e: unknown) {
       setErr(errMsg(e));
     } finally {
@@ -490,19 +513,24 @@ export default function TipsPage() {
   if (!initialReady) {
     return (
       <LoadingScreen
-        title="Tips yukleniyor"
-        subtitle="Liste hazirlaniyor"
+        title="Alpha Calls yükleniyor"
+        subtitle="Liste hazırlanıyor"
       />
     );
   }
 
   return (
-    <main className="grid gap-4">
+    <main className="relative grid gap-4">
+      <ActionOverlay
+        show={loading}
+        title="İşlem yapılıyor"
+        subtitle="Tip listesi güncelleniyor"
+      />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-zinc-100">Influencer</h1>
+          <h1 className="text-xl font-semibold text-zinc-100">Alpha Calls</h1>
           <p className="text-sm text-zinc-400">
-            Burada sadece <span className="text-zinc-200">influencer</span>{" "}
+            Burada sadece <span className="text-zinc-200">alpha call</span>{" "}
             kayıtları var.
           </p>
         </div>
@@ -553,7 +581,7 @@ export default function TipsPage() {
             <input
               id="tips-search"
               className="w-72 max-w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-2 text-sm outline-none focus:border-zinc-600"
-              placeholder="Ara: coin / symbol / handle / tip_id"
+              placeholder="Ara: coin / symbol / handle / CA"
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
@@ -611,11 +639,6 @@ export default function TipsPage() {
             );
           })}
 
-          <div className="ml-auto hidden items-center gap-2 md:flex">
-            <span className="text-xs text-zinc-500">
-              Kart görünümü — responsive
-            </span>
-          </div>
         </div>
 
         {/* SPOTLIGHT CARDS */}
@@ -791,12 +814,12 @@ export default function TipsPage() {
                         onClick={() => openUpdate(t)}
                         type="button"
                       >
-                        Guncelle
+                        Güncelle
                       </button>
 
                       <button
                         className="flex-1 rounded-lg border border-red-900/40 bg-red-950/50 px-3 py-1.5 text-xs font-medium text-red-100 transition hover:bg-red-900/60 md:flex-none"
-                        onClick={() => deleteTip(t.tip_id)}
+                        onClick={() => requestDeleteTip(t.tip_id)}
                         type="button"
                       >
                         Sil
@@ -904,6 +927,45 @@ export default function TipsPage() {
           </div>
         </div>
       </Modal>
+
+      <Modal
+        open={deleteOpen}
+        title="Call sil"
+        size="sm"
+        onClose={() => {
+          if (loading) return;
+          setDeleteOpen(false);
+          setDeleteTipId(null);
+        }}
+      >
+        <div className="grid gap-4">
+          <div className="rounded-xl border border-red-900/40 bg-red-950/40 p-3 text-sm text-red-100">
+            Bu call silinecek. Bu işlem geri alinamaz.
+          </div>
+          <div className="flex items-center justify-end gap-2">
+            <button
+              className="rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm hover:bg-zinc-800"
+              onClick={() => {
+                setDeleteOpen(false);
+                setDeleteTipId(null);
+              }}
+              type="button"
+              disabled={loading}
+            >
+              Vazgec
+            </button>
+            <button
+              className="rounded-xl border border-red-900/40 bg-red-950/40 px-4 py-2 text-sm text-red-100 hover:bg-red-900/60 disabled:opacity-60"
+              onClick={() => void confirmDeleteTip()}
+              type="button"
+              disabled={loading}
+            >
+              {loading ? "Siliniyor..." : "Sil"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
     </main>
   );
 }
