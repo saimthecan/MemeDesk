@@ -1,6 +1,7 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from ..db import pool
 from ..schemas.context import ContextOut, ContextSet
+from ..auth import require_admin
 
 router = APIRouter(prefix="/context", tags=["context"])
 
@@ -17,7 +18,7 @@ def get_context():
     return {"id": row[0], "active_ca": row[1], "active_chain": row[2], "updated_ts": row[3]}
 
 
-@router.post("", response_model=ContextOut)
+@router.post("", response_model=ContextOut, dependencies=[Depends(require_admin)])
 def set_active_coin(payload: ContextSet):
     with pool.connection() as conn:
         with conn.cursor() as cur:

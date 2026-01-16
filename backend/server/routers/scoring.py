@@ -1,11 +1,12 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from ..db import pool
 from ..schemas.scoring import ScoreCreate, ScoreOut
+from ..auth import require_admin
 
 router = APIRouter(prefix="/scoring", tags=["scoring"])
 
 
-@router.post("", response_model=dict)
+@router.post("", response_model=dict, dependencies=[Depends(require_admin)])
 def add_score(payload: ScoreCreate):
     with pool.connection() as conn:
         with conn.cursor() as cur:

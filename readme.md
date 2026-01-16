@@ -14,6 +14,9 @@ Alpha call paylaşan hesapların performansı burada izlenir. Paylaşım anında
 ### Snapshot
 Snapshot, trade ve alpha calls verilerini tek bir JSON dosyada toplar. Bu format, yapay zekanin  senin trade başarıın ve alpha caller  başarılarını analiz etmesi için idealdir; hangi callerın daha güçlü olduğunu belirlemeyi ve sonraki paylaşımlarında aksiyon alıp almamayı destekler.
 
+## Auth (Yonetici Islemleri)
+Duzenleme/ekleme/silme islemleri icin sifre gerekir. Sifre girildikten sonra token 3 saat gecerlidir; 3 saat dolunca tekrar sifre istenir.
+
 
 ## Gereksinimler
 - Python 3.12+

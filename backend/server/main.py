@@ -19,6 +19,7 @@ from .routers.snapshot import router as snapshot_router
 from .routers.dexscreener import router as dexscreener_router
 from .routers.wizard import router as wizard_router
 from .routers.context import router as context_router
+from .routers.auth import router as auth_router
 
 app = FastAPI(title="Memecoin Trade Tracker API")
 logger = logging.getLogger("app")
@@ -240,3 +241,4 @@ app.include_router(snapshot_router)
 app.include_router(dexscreener_router)
 app.include_router(wizard_router)
 app.include_router(context_router)
+app.include_router(auth_router)

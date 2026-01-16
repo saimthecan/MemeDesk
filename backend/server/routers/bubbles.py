@@ -1,11 +1,12 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from ..db import pool
 from ..schemas.bubbles import BubblesSet
+from ..auth import require_admin
 
 router = APIRouter(prefix="/bubbles", tags=["bubbles"])
 
 
-@router.post("/set")
+@router.post("/set", dependencies=[Depends(require_admin)])
 def set_bubbles(payload: BubblesSet):
     # validate duplicate ranks in input (avoid silent overwrite)
     cluster_ranks = [r.rank for r in payload.clusters]

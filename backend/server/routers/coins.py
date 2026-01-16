@@ -1,11 +1,12 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from ..db import pool
 from ..schemas.coins import CoinCreate, CoinOut
+from ..auth import require_admin
 
 router = APIRouter(prefix="/coins", tags=["coins"])
 
 
-@router.post("", response_model=CoinOut)
+@router.post("", response_model=CoinOut, dependencies=[Depends(require_admin)])
 def add_coin(payload: CoinCreate):
     with pool.connection() as conn:
         with conn.cursor() as cur:
@@ -205,7 +206,7 @@ def list_coins(
     ]
 
 
-@router.delete("/{ca}")
+@router.delete("/{ca}", dependencies=[Depends(require_admin)])
 def delete_coin(ca: str, chain: str | None = None):
     """Delete a coin and related data (FK cascades handle trades/tips and bubbles/scoring)."""
     ca = ca.lower()

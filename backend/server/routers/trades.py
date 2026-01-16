@@ -1,6 +1,6 @@
 from datetime import datetime
 import uuid
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from ..db import pool
 from ..schemas.trades import (
     TradeOpen,
@@ -11,6 +11,7 @@ from ..schemas.trades import (
     ScoringData,
     TradeUpdate,
 )
+from ..auth import require_admin
 
 router = APIRouter(prefix="/trades", tags=["trades"])
 
@@ -29,7 +30,7 @@ def _parse_cursor(cursor: str) -> tuple[datetime, int]:
     return ts, row_id
 
 
-@router.post("/open")
+@router.post("/open", dependencies=[Depends(require_admin)])
 def open_trade(payload: TradeOpen):
     with pool.connection() as conn:
         with conn.cursor() as cur:
@@ -103,7 +104,7 @@ def open_trade(payload: TradeOpen):
     }
 
 
-@router.post("/{trade_id}/close")
+@router.post("/{trade_id}/close", dependencies=[Depends(require_admin)])
 def close_trade(trade_id: str, payload: TradeClose):
     """Close a trade by its trade_id (string format like 'trade_8cd09a1a')."""
     if payload.trade_id and payload.trade_id != trade_id:
@@ -427,7 +428,7 @@ def list_trades_paged(
     }
 
 
-@router.delete("/{trade_id}")
+@router.delete("/{trade_id}", dependencies=[Depends(require_admin)])
 def delete_trade(trade_id: str):
     """Delete a single trade and its associated bubbles/scoring (does NOT affect the coin)."""
     with pool.connection() as conn:
@@ -451,7 +452,7 @@ def delete_trade(trade_id: str):
     return {"ok": True, "message": f"Trade {trade_id} and all associated data deleted"}
 
 # routes_trades.py dosyasının sonuna eklendi
-@router.patch("/{trade_id}")
+@router.patch("/{trade_id}", dependencies=[Depends(require_admin)])
 def update_trade(trade_id: str, payload: TradeUpdate):
     fields = []
     values = []

@@ -1,5 +1,5 @@
 from datetime import datetime
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from ..db import pool
 from ..schemas.tips import (
     AccountCreate,
@@ -11,6 +11,7 @@ from ..schemas.tips import (
     BubblesData,
     ScoringData,
 )
+from ..auth import require_admin
 
 router = APIRouter(tags=["tips"])
 
@@ -37,7 +38,7 @@ def _accounts_table(cur) -> str:
 
 
 # -------- Accounts --------
-@router.post("/accounts", response_model=AccountOut)
+@router.post("/accounts", response_model=AccountOut, dependencies=[Depends(require_admin)])
 def add_account(payload: AccountCreate):
     with pool.connection() as conn:
         with conn.cursor() as cur:
@@ -82,7 +83,7 @@ def list_accounts(limit: int = Query(default=200, ge=1, le=1000)):
 
 
 # -------- Tips --------
-@router.post("/tips", response_model=dict)
+@router.post("/tips", response_model=dict, dependencies=[Depends(require_admin)])
 def add_tip(payload: TipCreate):
     with pool.connection() as conn:
         with conn.cursor() as cur:
@@ -146,7 +147,7 @@ def add_tip(payload: TipCreate):
     return {"ok": True, "tip_id": tip_id, "chain": chain}
 
 
-@router.patch("/tips/{tip_id}", response_model=dict)
+@router.patch("/tips/{tip_id}", response_model=dict, dependencies=[Depends(require_admin)])
 def update_tip(tip_id: int, payload: TipUpdate):
     # allow nulls: if field is omitted, do not touch it
     fields = []
@@ -462,7 +463,7 @@ def list_tips_paged(
     return {"items": items, "total_count": total_count, "next_cursor": next_cursor}
 
 
-@router.delete("/tips/{tip_id}")
+@router.delete("/tips/{tip_id}", dependencies=[Depends(require_admin)])
 def delete_tip(tip_id: int):
     """Delete a single tip and its associated bubbles/scoring (does NOT affect the coin)."""
     with pool.connection() as conn:

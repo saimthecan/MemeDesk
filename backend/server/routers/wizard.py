@@ -2,10 +2,11 @@ import uuid
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ..db import pool
+from ..auth import require_admin
 
 router = APIRouter(prefix="/wizard", tags=["wizard"])
 
@@ -196,7 +197,7 @@ def _insert_tip_score(cur, tip_id: int, intuition_score: Optional[int]):
     return cur.fetchone()
 
 
-@router.post("/dex_add")
+@router.post("/dex_add", dependencies=[Depends(require_admin)])
 def dex_add(payload: DexAdd):
     ca = payload.ca.lower()
     trade_id_str = f"trade_{uuid.uuid4().hex[:8]}" # Generate trade_id
@@ -250,7 +251,7 @@ def dex_add(payload: DexAdd):
     }
 
 
-@router.post("/influencer_add")
+@router.post("/influencer_add", dependencies=[Depends(require_admin)])
 def influencer_add(payload: InfluencerAdd):
     ca = payload.ca.lower()
     
