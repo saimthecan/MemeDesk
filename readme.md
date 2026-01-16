@@ -17,6 +17,15 @@ Snapshot, trade ve alpha calls verilerini tek bir JSON dosyada toplar. Bu format
 ## Auth (Yonetici Islemleri)
 Duzenleme/ekleme/silme islemleri icin sifre gerekir. Sifre girildikten sonra token 3 saat gecerlidir; 3 saat dolunca tekrar sifre istenir.
 
+## Kullanilan Teknolojiler
+- Frontend: Next.js (App Router), React, TypeScript, Tailwind CSS
+- Backend: FastAPI (Python), PostgreSQL, psycopg
+
+## Neon / Vercel / Render Kullanimlari
+- Neon: PostgreSQL veritabani (production DB)
+- Render: Backend API barindirma (FastAPI)
+- Vercel: Frontend barindirma (Next.js)
+
 
 ## Gereksinimler
 - Python 3.12+
