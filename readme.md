@@ -1,4 +1,4 @@
-# Alpha Call
+# Meme Desk
 
 ## Proje Özeti
 Bu proje, kendi trade kayıtlarını ve alpha call paylaşan hesapların başarılarını takip eden kişisel bir paneldir.
