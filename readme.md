@@ -1,4 +1,19 @@
-# Shitcoin App
+# Alpha Call
+
+## Proje Özeti
+Bu proje, kendi trade kayıtlarını ve alpha call paylaşan hesapların başarılarını takip eden kişisel bir paneldir.
+
+### Dashboard
+Dashboard, iki temel aksiyonu net ayırır:
+- Trade aç: Senin gerçek alım-satım kararını kaydeder. Giriş/çıkış, kâr-zarar ve son miktar buradan takip edilir.
+- Alpha Call ekle: Bir hesabın yaptığı paylaşımı kaydeder. Bu senin işlemin değil; paylaşımın performansını ölçmek içindir.
+
+### Alpha Calls
+Alpha call paylaşan hesapların performansı burada izlenir. Paylaşım anındaki mcap ve sonrası (coinin paylaşımdan sonraki ulaştığı max ve min değer) üzerinden başarı ölçülür.
+
+### Snapshot
+Snapshot, trade ve alpha calls verilerini tek bir JSON dosyada toplar. Bu format, yapay zekanin  senin trade başarıın ve alpha caller  başarılarını analiz etmesi için idealdir; hangi callerın daha güçlü olduğunu belirlemeyi ve sonraki paylaşımlarında aksiyon alıp almamayı destekler.
+
 
 ## Gereksinimler
 - Python 3.12+
