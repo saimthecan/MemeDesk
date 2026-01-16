@@ -6,6 +6,12 @@ cd backend
 source .venv/Scripts/activate
 python -m uvicorn app:app --reload --port 8000
 
+run docker ->
+docker compose -f docker-compose.dev.yml up --build -d
+
+stop -> docker compose -f docker-compose.dev.yml down
+run -> docker compose -f docker-compose.dev.yml up -d
+
 
 First, run the development server:
 

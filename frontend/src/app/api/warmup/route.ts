@@ -11,7 +11,8 @@ function sleep(ms: number) {
 }
 
 export async function POST() {
-  const base = process.env.NEXT_PUBLIC_API_URL;
+  const base =
+    process.env.INTERNAL_API_URL || process.env.NEXT_PUBLIC_API_URL;
   const key = process.env.WARMUP_KEY;
 
   if (!base) {
