@@ -57,33 +57,45 @@ async def _cache_set_async(key: str, value: dict[str, Any]) -> None:
 def _ms_to_dt_utc(ms: int) -> datetime:
     return datetime.fromtimestamp(ms / 1000, tz=timezone.utc)
 
-async def check_chain(client: httpx.AsyncClient, chain: str, ca_l: str) -> tuple[str, list[dict]] | None:
-    """Tek bir zinciri kontrol eden yardımcı asenkron fonksiyon"""
+async def check_chain(client: httpx.AsyncClient, chain: str, ca_l: str) -> dict[str, Any]:
+    """Check a single chain for a token address."""
     url = f"{DEX_BASE}/token-pairs/v1/{chain}/{ca_l}"
+    headers = {"Accept": "application/json", "User-Agent": "memedesk/1.0"}
+    last_error: str | None = None
     for attempt in range(MAX_RETRIES):
         resp = None
         try:
-            resp = await client.get(url)
+            resp = await client.get(url, headers=headers)
         except Exception:
+            last_error = "request_failed"
             resp = None
 
         if resp is not None and resp.status_code == 200:
             try:
                 data = resp.json()
             except Exception:
-                return None
+                return {"status": "error", "chain": chain, "error": "invalid_json"}
             if isinstance(data, list) and data:
                 valid_pairs = [x for x in data if isinstance(x, dict)]
                 if valid_pairs:
-                    return chain, valid_pairs
-            return None
+                    return {"status": "ok", "chain": chain, "pairs": valid_pairs}
+            return {"status": "not_found", "chain": chain}
 
-        if resp is not None and resp.status_code not in RETRY_STATUS:
-            return None
+        if resp is not None:
+            if resp.status_code == 404:
+                return {"status": "not_found", "chain": chain}
+            if resp.status_code not in RETRY_STATUS:
+                return {
+                    "status": "error",
+                    "chain": chain,
+                    "error": f"http_{resp.status_code}",
+                }
+            last_error = f"http_{resp.status_code}"
 
         if attempt < MAX_RETRIES - 1:
             await asyncio.sleep(RETRY_BACKOFF_SEC * (2 ** attempt))
-    return None
+    return {"status": "error", "chain": chain, "error": last_error or "unknown"}
+
 
 @router.get("/token_meta")
 async def token_meta(ca: str = Query(min_length=3)):
@@ -107,13 +119,24 @@ async def token_meta(ca: str = Query(min_length=3)):
     found_data = None
 
     for res in results:
-        if res:
-            found_chain, found_data = res
-            break # İlk bulunanı al (veya mantığına göre en kalabalık olanı seçebilirsin)
-
+        if res.get("status") == "ok":
+            found_chain = res.get("chain")
+            found_data = res.get("pairs")
+            break  # first match
     if not found_data or not found_chain:
-        raise HTTPException(status_code=404, detail="Token herhangi bir desteklenen ağda bulunamadı.")
-
+        errors = [r for r in results if r.get("status") == "error"]
+        if errors:
+            raise HTTPException(
+                status_code=502,
+                detail={
+                    "message": "dexscreener_unavailable",
+                    "errors": errors,
+                },
+            )
+        raise HTTPException(
+            status_code=404,
+            detail="Token herhangi bir desteklenen agda bulunamadi.",
+        )
     # En uygun çifti seçelim
     chosen = None
     for p in found_data:
