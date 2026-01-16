@@ -470,6 +470,14 @@ export default function WorkspaceDashboard() {
   const caInputRef = useRef<HTMLInputElement | null>(null);
   const ca = caInput.trim().toLowerCase();
 
+  function isValidCa(input: string): boolean {
+    const v = input.trim();
+    if (!v) return false;
+    if (/^0x[a-fA-F0-9]{40}$/.test(v)) return true;
+    if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(v)) return true;
+    return false;
+  }
+
   const [meta, setMeta] = useState<TokenMeta | null>(null);
   const [metaLoading, setMetaLoading] = useState(false);
   const metaReqRef = useRef(0);
@@ -480,7 +488,14 @@ export default function WorkspaceDashboard() {
 
   async function fetchMeta(caOverride?: string) {
     const raw = (caOverride ?? caInputRef.current?.value ?? caInput).trim();
-    if (!raw) return;
+    if (!raw) {
+      setError("CA girin.");
+      return;
+    }
+    if (!isValidCa(raw)) {
+      setError("Geçerli bir CA girin.");
+      return;
+    }
 
     const caQ = raw.toLowerCase();
 

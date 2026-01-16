@@ -739,6 +739,11 @@ export default function TradesPage() {
                       >
                         {fmtPctSigned(t.pnl_pct)}
                       </div>
+                      {!isOpen && t.size_usd != null && t.pnl_usd != null ? (
+                        <div className="mt-0.5 text-sm font-semibold text-zinc-100 tabular-nums">
+                          Son Miktar: {fmtUsdFull(t.size_usd + t.pnl_usd)}
+                        </div>
+                      ) : null}
                       <div className="mt-0.5 text-xs text-zinc-400 tabular-nums">
                         Kar/Zarar: {t.pnl_usd == null ? "-" : fmtUsdFull(t.pnl_usd)}
                       </div>
