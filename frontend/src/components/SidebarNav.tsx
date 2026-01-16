@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { errMsg } from "../utils/errors";
 
 const nav = [
   { href: "/", label: "Dashboard" },
@@ -12,6 +13,44 @@ const nav = [
 
 export default function SidebarNav() {
   const [open, setOpen] = useState(false);
+  const [warmingUp, setWarmingUp] = useState(false);
+  const [warmupMsg, setWarmupMsg] = useState<string | null>(null);
+  const [warmupError, setWarmupError] = useState<string | null>(null);
+  const toggleBtnRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (toggleBtnRef.current) {
+      toggleBtnRef.current.setAttribute(
+        "aria-expanded",
+        open ? "true" : "false"
+      );
+    }
+  }, [open]);
+
+  async function warmupSystem() {
+    if (warmingUp) return;
+    setWarmingUp(true);
+    setWarmupMsg(null);
+    setWarmupError(null);
+
+    try {
+      const res = await fetch("/api/warmup", {
+        method: "POST",
+        cache: "no-store",
+      });
+      const txt = await res.text();
+      if (!res.ok) throw new Error(`Warmup failed (${res.status}): ${txt}`);
+      setWarmupMsg("Sistem uyandı ✅");
+      window.setTimeout(() => {
+        setWarmupMsg(null);
+      }, 3000);
+    } catch (e: unknown) {
+      setWarmupMsg(null);
+      setWarmupError(errMsg(e));
+    } finally {
+      setWarmingUp(false);
+    }
+  }
 
   return (
     <div className="sticky top-6 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-2">
@@ -20,10 +59,10 @@ export default function SidebarNav() {
           Menu
         </div>
         <button
+          ref={toggleBtnRef}
           type="button"
           className="flex h-8 w-10 items-center justify-center rounded-lg border border-zinc-800 bg-zinc-950 text-zinc-200 hover:bg-zinc-900 md:hidden"
           onClick={() => setOpen((v) => !v)}
-          aria-expanded={open}
           aria-controls="mobile-nav"
           aria-label={open ? "Men? kapat" : "Men? a?"}
         >
@@ -54,6 +93,23 @@ export default function SidebarNav() {
             </div>
           </Link>
         ))}
+        <div className="mt-2 border-t border-zinc-800 pt-2">
+          <button
+            className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-900 disabled:opacity-60"
+            onClick={() => void warmupSystem()}
+            disabled={warmingUp}
+            type="button"
+            title="Render + Neon uyandırır"
+          >
+            {warmingUp ? "Uyandırılıyor…" : "Sistemi uyandır"}
+          </button>
+          {warmupMsg ? (
+            <div className="mt-2 text-xs text-emerald-300">{warmupMsg}</div>
+          ) : null}
+          {warmupError ? (
+            <div className="mt-2 text-xs text-rose-200">{warmupError}</div>
+          ) : null}
+        </div>
       </nav>
     </div>
   );

@@ -763,13 +763,15 @@ export default function TradesPage() {
                         Kapat
                       </button>
                     ) : null}
-                    <button
-                      onClick={() => openEditModal(t)}
-                      className="h-7 flex-1 rounded-lg border border-sky-900/60 bg-sky-950/50 px-2.5 py-1 text-[11px] text-sky-100 hover:bg-sky-900/60 text-center md:w-20 md:flex-none"
-                      type="button"
-                    >
-                      Düzenle
-                    </button>
+                    {!isOpen ? (
+                      <button
+                        onClick={() => openEditModal(t)}
+                        className="h-7 flex-1 rounded-lg border border-sky-900/60 bg-sky-950/50 px-2.5 py-1 text-[11px] text-sky-100 hover:bg-sky-900/60 text-center md:w-20 md:flex-none"
+                        type="button"
+                      >
+                        Düzenle
+                      </button>
+                    ) : null}
                     <button
                       className="h-7 flex-1 rounded-lg border border-red-900/40 bg-red-950/40 px-2.5 py-1 text-[11px] text-red-100 hover:bg-red-900/60 text-center md:w-20 md:flex-none"
                       onClick={() => requestDeleteTrade(t.trade_id)}

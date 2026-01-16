@@ -2,14 +2,27 @@ import base64
 import hashlib
 import hmac
 import json
-import os
 import time
+from pathlib import Path
 from fastapi import HTTPException, Request
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
-ADMIN_TOKEN_SECRET = os.getenv("ADMIN_TOKEN_SECRET")
-ADMIN_TOKEN_TTL_SECONDS = int(os.getenv("ADMIN_TOKEN_TTL_SECONDS", "10800"))
+ENV_PATH = Path(__file__).resolve().parents[1] / ".env"
+
+
+class AuthSettings(BaseSettings):
+    admin_password: str | None = None
+    admin_token_secret: str | None = None
+    admin_token_ttl_seconds: int = 10800
+
+    model_config = SettingsConfigDict(env_file=str(ENV_PATH), extra="ignore")
+
+
+settings = AuthSettings()
+ADMIN_PASSWORD = settings.admin_password
+ADMIN_TOKEN_SECRET = settings.admin_token_secret
+ADMIN_TOKEN_TTL_SECONDS = settings.admin_token_ttl_seconds
 
 
 def _b64url_encode(data: bytes) -> str:
