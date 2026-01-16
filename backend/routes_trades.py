@@ -1,4 +1,5 @@
 from datetime import datetime
+import uuid
 from fastapi import APIRouter, HTTPException, Query
 from db import pool
 from schemas_trades import (
@@ -32,22 +33,34 @@ def _parse_cursor(cursor: str) -> tuple[datetime, int]:
 def open_trade(payload: TradeOpen):
     with pool.connection() as conn:
         with conn.cursor() as cur:
-            ca = payload.ca
+            ca = payload.ca.lower()
+            chain = payload.chain.lower() if payload.chain else None
+            trade_id_str = f"trade_{uuid.uuid4().hex[:8]}"
 
             # coin name for response clarity
-            cur.execute("SELECT name FROM coins WHERE ca = %s;", (ca,))
-            coin_row = cur.fetchone()
-            if coin_row is None:
-                raise HTTPException(status_code=404, detail="Coin not found")
-            coin_name = coin_row[0]
+            if chain:
+                cur.execute("SELECT name, chain FROM coins WHERE ca = %s AND chain = %s;", (ca, chain))
+                coin_row = cur.fetchone()
+                if coin_row is None:
+                    raise HTTPException(status_code=404, detail="Coin not found")
+                coin_name = coin_row[0]
+                chain = coin_row[1]
+            else:
+                cur.execute("SELECT name, chain FROM coins WHERE ca = %s LIMIT 2;", (ca,))
+                rows = cur.fetchall()
+                if not rows:
+                    raise HTTPException(status_code=404, detail="Coin not found")
+                if len(rows) > 1:
+                    raise HTTPException(status_code=409, detail="Multiple chains found for this CA")
+                coin_name, chain = rows[0]
 
             cur.execute(
                 """
-                INSERT INTO trades (ca, entry_ts, entry_mcap_usd, size_usd)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO trades (ca, chain, entry_mcap_usd, size_usd, trade_id)
+                VALUES (%s, %s, %s, %s, %s)
                 RETURNING id, trade_id, entry_ts;
                 """,
-                (ca, payload.entry_ts, payload.entry_mcap_usd, payload.size_usd),
+                (ca, chain, payload.entry_mcap_usd, payload.size_usd, trade_id_str),
             )
             row = cur.fetchone()
             # row[0] -> integer ID (Primary Key)
@@ -85,6 +98,7 @@ def open_trade(payload: TradeOpen):
         "trade_id": row[1],
         "entry_ts": row[2],
         "ca": ca,
+        "chain": chain,
         "coin_name": coin_name,
     }
 
@@ -92,6 +106,8 @@ def open_trade(payload: TradeOpen):
 @router.post("/{trade_id}/close")
 def close_trade(trade_id: str, payload: TradeClose):
     """Close a trade by its trade_id (string format like 'trade_8cd09a1a')."""
+    if payload.trade_id and payload.trade_id != trade_id:
+        raise HTTPException(status_code=422, detail="Trade ID mismatch")
     with pool.connection() as conn:
         with conn.cursor() as cur:
             # Close only if still open
@@ -121,8 +137,13 @@ def close_trade(trade_id: str, payload: TradeClose):
 def list_trades(
     limit: int = Query(default=100, ge=1, le=1000),
     ca: str | None = None,
+    chain: str | None = None,
     only_open: bool = False,
 ):
+    if ca:
+        ca = ca.lower()
+    if chain:
+        chain = chain.lower()
     with pool.connection() as conn:
         with conn.cursor() as cur:
             where = []
@@ -130,12 +151,15 @@ def list_trades(
             if ca:
                 where.append("ca = %s")
                 params.append(ca)
+            if chain:
+                where.append("chain = %s")
+                params.append(chain)
             if only_open:
                 where.append("exit_ts IS NULL")
 
             sql = """
                 SELECT
-                  id, trade_id, ca, coin_name,
+                  id, trade_id, ca, chain, coin_name,
                   entry_ts, entry_mcap_usd, size_usd,
                   exit_ts, exit_mcap_usd, exit_reason,
                   pnl_pct, pnl_usd
@@ -207,15 +231,16 @@ def list_trades(
                         "id": r[0],
                         "trade_id": r[1],
                         "ca": r[2],
-                        "coin_name": r[3],
-                        "entry_ts": r[4],
-                        "entry_mcap_usd": float(r[5]),
-                        "size_usd": float(r[6]) if r[6] is not None else None,
-                        "exit_ts": r[7],
-                        "exit_mcap_usd": float(r[8]) if r[8] is not None else None,
-                        "exit_reason": r[9],
-                        "pnl_pct": float(r[10]) if r[10] is not None else None,
-                        "pnl_usd": float(r[11]) if r[11] is not None else None,
+                        "chain": r[3],
+                        "coin_name": r[4],
+                        "entry_ts": r[5],
+                        "entry_mcap_usd": float(r[6]),
+                        "size_usd": float(r[7]) if r[7] is not None else None,
+                        "exit_ts": r[8],
+                        "exit_mcap_usd": float(r[9]) if r[9] is not None else None,
+                        "exit_reason": r[10],
+                        "pnl_pct": float(r[11]) if r[11] is not None else None,
+                        "pnl_usd": float(r[12]) if r[12] is not None else None,
                         "bubbles": bubbles,
                         "scoring": scoring,
                     }
@@ -228,10 +253,15 @@ def list_trades(
 def list_trades_paged(
     limit: int = Query(default=100, ge=1, le=500),
     ca: str | None = None,
+    chain: str | None = None,
     scope: str = "all",
     q: str | None = None,
     cursor: str | None = None,
 ):
+    if ca:
+        ca = ca.lower()
+    if chain:
+        chain = chain.lower()
     cursor_ts = None
     cursor_id = None
     if cursor:
@@ -248,6 +278,9 @@ def list_trades_paged(
             if ca:
                 where.append("v.ca = %s")
                 params.append(ca)
+            if chain:
+                where.append("v.chain = %s")
+                params.append(chain)
             if scope not in ("all", "open", "closed"):
                 raise HTTPException(status_code=422, detail="Invalid scope")
             if scope == "open":
@@ -265,12 +298,12 @@ def list_trades_paged(
 
             sql = """
                 SELECT
-                  v.id, v.trade_id, v.ca, v.coin_name,
+                  v.id, v.trade_id, v.ca, v.chain, v.coin_name,
                   v.entry_ts, v.entry_mcap_usd, v.size_usd,
                   v.exit_ts, v.exit_mcap_usd, v.exit_reason,
                   v.pnl_pct, v.pnl_usd
                 FROM v_trades_pnl v
-                LEFT JOIN coins c ON v.ca = c.ca
+                LEFT JOIN coins c ON v.ca = c.ca AND v.chain = c.chain
             """
             if where:
                 sql += " WHERE " + " AND ".join(where)
@@ -287,11 +320,14 @@ def list_trades_paged(
                   COUNT(*) FILTER (WHERE t.exit_ts IS NULL) AS open_count,
                   COUNT(*) FILTER (WHERE t.exit_ts IS NOT NULL) AS closed_count
                 FROM trades t
-                JOIN coins c ON t.ca = c.ca
+                JOIN coins c ON t.ca = c.ca AND t.chain = c.chain
             """
             if ca:
                 count_where.append("t.ca = %s")
                 count_params.append(ca)
+            if chain:
+                count_where.append("t.chain = %s")
+                count_params.append(chain)
             if q_like:
                 count_where.append(
                     "(c.name ILIKE %s OR t.ca ILIKE %s OR t.trade_id::text ILIKE %s OR c.symbol ILIKE %s)"
@@ -361,15 +397,16 @@ def list_trades_paged(
                 "id": r[0],
                 "trade_id": r[1],
                 "ca": r[2],
-                "coin_name": r[3],
-                "entry_ts": r[4],
-                "entry_mcap_usd": float(r[5]),
-                "size_usd": float(r[6]) if r[6] is not None else None,
-                "exit_ts": r[7],
-                "exit_mcap_usd": float(r[8]) if r[8] is not None else None,
-                "exit_reason": r[9],
-                "pnl_pct": float(r[10]) if r[10] is not None else None,
-                "pnl_usd": float(r[11]) if r[11] is not None else None,
+                "chain": r[3],
+                "coin_name": r[4],
+                "entry_ts": r[5],
+                "entry_mcap_usd": float(r[6]),
+                "size_usd": float(r[7]) if r[7] is not None else None,
+                "exit_ts": r[8],
+                "exit_mcap_usd": float(r[9]) if r[9] is not None else None,
+                "exit_reason": r[10],
+                "pnl_pct": float(r[11]) if r[11] is not None else None,
+                "pnl_usd": float(r[12]) if r[12] is not None else None,
                 "bubbles": bubbles,
                 "scoring": scoring,
             }
@@ -378,7 +415,7 @@ def list_trades_paged(
     next_cursor = None
     if len(rows) == limit:
         last = rows[-1]
-        last_ts = last[4].isoformat() if last[4] else ""
+        last_ts = last[5].isoformat() if last[5] else ""
         next_cursor = f"{last_ts},{last[0]}"
 
     return {
@@ -445,5 +482,9 @@ def update_trade(trade_id: str, payload: TradeUpdate):
                 f"UPDATE trades SET {', '.join(fields)} WHERE trade_id = %s RETURNING trade_id;",
                 tuple(values),
             )
+            row = cur.fetchone()
+            if row is None:
+                conn.rollback()
+                raise HTTPException(status_code=404, detail="Trade not found")
             conn.commit()
     return {"ok": True}

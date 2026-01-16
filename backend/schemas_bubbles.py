@@ -9,5 +9,6 @@ class BubbleRow(BaseModel):
 
 class BubblesSet(BaseModel):
     ca: str | None = None
+    chain: str | None = None
     clusters: List[BubbleRow] = []
     others: List[BubbleRow] = []

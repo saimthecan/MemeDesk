@@ -31,6 +31,7 @@ class AccountOut(BaseModel):
 
 class TipCreate(BaseModel):
     ca: str = Field(min_length=3)
+    chain: Optional[str] = None
     account_id: int
     post_ts: datetime
     post_mcap_usd: float = Field(gt=0)
@@ -41,12 +42,13 @@ class TipCreate(BaseModel):
 class TipUpdate(BaseModel):
     peak_mcap_usd: Optional[float] = Field(default=None, gt=0)
     trough_mcap_usd: Optional[float] = Field(default=None, gt=0)
-    rug_flag: Optional[int] = Field(default=None)  # 0/1
+    rug_flag: Optional[int] = Field(default=None, ge=0, le=1)  # 0/1
 
 
 class TipOut(BaseModel):
     tip_id: int
     ca: str
+    chain: Optional[str] = None
     coin_name: str
     account_id: int
     platform: str

@@ -30,7 +30,7 @@ def add_coin(payload: CoinCreate):
                 conn.commit()
             except Exception as e:
                 conn.rollback()
-                if "coins_ca_key" in str(e):
+                if "coins_ca_key" in str(e) or "coins_pkey" in str(e) or "uq_coins_chain_ca" in str(e):
                     raise HTTPException(status_code=409, detail="Coin already exists")
                 raise
 
@@ -46,25 +46,45 @@ def add_coin(payload: CoinCreate):
 
 
 @router.get("/summary")
-def coins_summary():
+def coins_summary(chain: str | None = None):
     """One-row-per-coin summary for the UI (counts + latest activity)."""
+    if chain:
+        chain = chain.lower()
     with pool.connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
+            sql = """
                 SELECT
                   c.ca, c.name, c.symbol, c.launch_ts, c.chain, c.source_type, c.created_ts,
-                  (SELECT COUNT(*) FROM trades t WHERE t.ca = c.ca) AS trades_total,
-                  (SELECT COUNT(*) FROM trades t WHERE t.ca = c.ca AND t.exit_ts IS NULL) AS trades_open,
-                  (SELECT COUNT(*) FROM tips x WHERE x.ca = c.ca) AS tips_total,
+                  COALESCE(t.trades_total, 0) AS trades_total,
+                  COALESCE(t.trades_open, 0) AS trades_open,
+                  COALESCE(x.tips_total, 0) AS tips_total,
                   NULLIF(GREATEST(
-                    COALESCE((SELECT MAX(entry_ts) FROM trades t WHERE t.ca=c.ca), '-infinity'::timestamptz),
-                    COALESCE((SELECT MAX(post_ts) FROM tips x WHERE x.ca=c.ca), '-infinity'::timestamptz)
+                    COALESCE(t.last_trade_ts, '-infinity'::timestamptz),
+                    COALESCE(x.last_tip_ts, '-infinity'::timestamptz)
                   ), '-infinity'::timestamptz) AS last_activity_ts
                 FROM coins c
-                ORDER BY last_activity_ts DESC NULLS LAST, c.created_ts DESC;
-                """
-            )
+                LEFT JOIN LATERAL (
+                  SELECT
+                    COUNT(*) AS trades_total,
+                    COUNT(*) FILTER (WHERE exit_ts IS NULL) AS trades_open,
+                    MAX(entry_ts) AS last_trade_ts
+                  FROM trades
+                  WHERE trades.ca = c.ca AND trades.chain = c.chain
+                ) t ON true
+                LEFT JOIN LATERAL (
+                  SELECT
+                    COUNT(*) AS tips_total,
+                    MAX(post_ts) AS last_tip_ts
+                  FROM tips
+                  WHERE tips.ca = c.ca AND tips.chain = c.chain
+                ) x ON true
+            """
+            params = []
+            if chain:
+                sql += " WHERE c.chain = %s"
+                params.append(chain)
+            sql += " ORDER BY last_activity_ts DESC NULLS LAST, c.created_ts DESC;"
+            cur.execute(sql, tuple(params))
             rows = cur.fetchall()
 
     return [
@@ -87,21 +107,40 @@ def coins_summary():
 
 @router.get("/{ca}", response_model=CoinOut)
 @router.get("/{ca}/detail", response_model=CoinOut) # ADDED THIS LINE
-def get_coin(ca: str):
+def get_coin(ca: str, chain: str | None = None):
     ca = ca.lower()
+    if chain:
+        chain = chain.lower()
     with pool.connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT ca, name, symbol, chain, launch_ts, source_type, created_ts
-                FROM coins
-                WHERE ca = %s;
-                """,
-                (ca,),
-            )
-            row = cur.fetchone()
-            if row is None:
-                raise HTTPException(status_code=404, detail="Coin not found")
+            if chain:
+                cur.execute(
+                    """
+                    SELECT ca, name, symbol, chain, launch_ts, source_type, created_ts
+                    FROM coins
+                    WHERE ca = %s AND chain = %s;
+                    """,
+                    (ca, chain),
+                )
+                row = cur.fetchone()
+                if row is None:
+                    raise HTTPException(status_code=404, detail="Coin not found")
+            else:
+                cur.execute(
+                    """
+                    SELECT ca, name, symbol, chain, launch_ts, source_type, created_ts
+                    FROM coins
+                    WHERE ca = %s
+                    LIMIT 2;
+                    """,
+                    (ca,),
+                )
+                rows = cur.fetchall()
+                if not rows:
+                    raise HTTPException(status_code=404, detail="Coin not found")
+                if len(rows) > 1:
+                    raise HTTPException(status_code=409, detail="Multiple chains found for this CA")
+                row = rows[0]
 
     return {
         "ca": row[0],
@@ -118,28 +157,38 @@ def get_coin(ca: str):
 def list_coins(
     limit: int = Query(default=200, ge=1, le=2000),
     ca: str | None = Query(default=None, min_length=3),
+    chain: str | None = Query(default=None, min_length=2),
 ):
+    if ca:
+        ca = ca.lower()
+    if chain:
+        chain = chain.lower()
     with pool.connection() as conn:
         with conn.cursor() as cur:
             if ca:
-                cur.execute(
-                    """
+                sql = """
                     SELECT ca, name, symbol, chain, launch_ts, source_type, created_ts
                     FROM coins
-                    WHERE ca = %s;
-                    """,
-                    (ca.lower(),),
-                )
+                    WHERE ca = %s
+                """
+                params = [ca]
+                if chain:
+                    sql += " AND chain = %s"
+                    params.append(chain)
+                sql += ";"
+                cur.execute(sql, tuple(params))
             else:
-                cur.execute(
-                    """
+                sql = """
                     SELECT ca, name, symbol, chain, launch_ts, source_type, created_ts
                     FROM coins
-                    ORDER BY created_ts DESC
-                    LIMIT %s;
-                    """,
-                    (limit,),
-                )
+                """
+                params = []
+                if chain:
+                    sql += " WHERE chain = %s"
+                    params.append(chain)
+                sql += " ORDER BY created_ts DESC LIMIT %s;"
+                params.append(limit)
+                cur.execute(sql, tuple(params))
             rows = cur.fetchall()
 
     return [
@@ -157,48 +206,39 @@ def list_coins(
 
 
 @router.delete("/{ca}")
-def delete_coin(ca: str):
-    """Delete a coin and cascade delete all related data (trades, tips, account_coin_metrics, and their bubbles/scoring)."""
+def delete_coin(ca: str, chain: str | None = None):
+    """Delete a coin and related data (FK cascades handle trades/tips and bubbles/scoring)."""
     ca = ca.lower()
+    if chain:
+        chain = chain.lower()
     with pool.connection() as conn:
         with conn.cursor() as cur:
             # Check if coin exists
-            cur.execute("SELECT 1 FROM coins WHERE ca = %s;", (ca,))
-            if cur.fetchone() is None:
-                raise HTTPException(status_code=404, detail="Coin not found")
-            
-            # Get all trade_ids for this coin to delete their bubbles/scoring
-            cur.execute("SELECT trade_id FROM trades WHERE ca = %s;", (ca,))
-            trade_ids = [row[0] for row in cur.fetchall()]
-            
-            # Get all tip_ids for this coin to delete their bubbles/scoring
-            cur.execute("SELECT tip_id FROM tips WHERE ca = %s;", (ca,))
-            tip_ids = [row[0] for row in cur.fetchall()]
-            
-            # Delete trade-specific bubbles and scoring
-            for trade_id in trade_ids:
-                cur.execute("DELETE FROM trade_bubbles WHERE trade_id = %s;", (trade_id,))
-                cur.execute("DELETE FROM trade_bubbles_others WHERE trade_id = %s;", (trade_id,))
-                cur.execute("DELETE FROM trade_scoring WHERE trade_id = %s;", (trade_id,))
-            
-            # Delete tip-specific bubbles and scoring
-            for tip_id in tip_ids:
-                cur.execute("DELETE FROM tip_bubbles WHERE tip_id = %s;", (tip_id,))
-                cur.execute("DELETE FROM tip_bubbles_others WHERE tip_id = %s;", (tip_id,))
-                cur.execute("DELETE FROM tip_scoring WHERE tip_id = %s;", (tip_id,))
-            
-            # Delete account_coin_metrics for this coin (cascade will handle)
-            cur.execute("DELETE FROM account_coin_metrics WHERE ca = %s;", (ca,))
-            
-            # Delete tips (cascade will handle tip_bubbles, tip_bubbles_others, tip_scoring)
-            cur.execute("DELETE FROM tips WHERE ca = %s;", (ca,))
-            
-            # Delete trades (cascade will handle trade_bubbles, trade_bubbles_others, trade_scoring)
-            cur.execute("DELETE FROM trades WHERE ca = %s;", (ca,))
-            
-            # Finally delete the coin
-            cur.execute("DELETE FROM coins WHERE ca = %s;", (ca,))
+            if chain:
+                cur.execute("SELECT 1 FROM coins WHERE ca = %s AND chain = %s;", (ca, chain))
+                if cur.fetchone() is None:
+                    raise HTTPException(status_code=404, detail="Coin not found")
+            else:
+                cur.execute("SELECT chain FROM coins WHERE ca = %s LIMIT 2;", (ca,))
+                rows = cur.fetchall()
+                if not rows:
+                    raise HTTPException(status_code=404, detail="Coin not found")
+                if len(rows) > 1:
+                    raise HTTPException(status_code=409, detail="Multiple chains found for this CA")
+                chain = rows[0][0]
+
+            # Delete account_coin_metrics for this coin (if present)
+            cur.execute(
+                "DELETE FROM account_coin_metrics WHERE ca = %s AND chain = %s;",
+                (ca, chain),
+            )
+
+            # Delete the coin; FK cascades clean related rows
+            cur.execute("DELETE FROM coins WHERE ca = %s AND chain = %s;", (ca, chain))
             
             conn.commit()
     
-    return {"ok": True, "message": f"Coin {ca} and all related data (trades, tips, account_coin_metrics, bubbles, scoring) deleted"}
+    return {
+        "ok": True,
+        "message": f"Coin {ca} ({chain}) and all related data (trades, tips, account_coin_metrics, bubbles, scoring) deleted",
+    }

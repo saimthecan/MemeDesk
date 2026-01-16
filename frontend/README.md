@@ -4,8 +4,7 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 cd backend
 source .venv/Scripts/activate
-uvicorn app:app --reload --port 8000
-
+python -m uvicorn app:app --reload --port 8000
 
 
 First, run the development server:

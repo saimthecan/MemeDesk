@@ -64,6 +64,13 @@ def _merge_source_type(old: str | None, add: str) -> str:
     return "both"
 
 
+def _accounts_table(cur) -> str:
+    cur.execute(
+        "SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'accounts';"
+    )
+    return "accounts" if cur.fetchone() else "social_accounts"
+
+
 def _upsert_coin(
     cur,
     ca: str,
@@ -78,9 +85,9 @@ def _upsert_coin(
     # normalize chain
     chain_norm = (chain or "").strip().lower()
     if chain_norm in ("", "unknown"):
-        chain_norm = None
+        chain_norm = "solana"
 
-    cur.execute("SELECT source_type, chain FROM coins WHERE ca = %s;", (ca_l,))
+    cur.execute("SELECT source_type, chain FROM coins WHERE ca = %s AND chain = %s;", (ca_l, chain_norm))
     row = cur.fetchone()
 
     if row:
@@ -99,16 +106,12 @@ def _upsert_coin(
         if launch_ts:
             updates.append("launch_ts = %s")
             params.append(launch_ts)
-        if chain_norm and not old_chain:
-            updates.append("chain = %s")
-            params.append(chain_norm)
-        
         updates.append("source_type = %s")
         params.append(new_source)
         
         if updates:
-            sql = f"UPDATE coins SET {', '.join(updates)} WHERE ca = %s RETURNING ca, name, symbol, launch_ts, chain, source_type;"
-            params.append(ca_l)
+            sql = f"UPDATE coins SET {', '.join(updates)} WHERE ca = %s AND chain = %s RETURNING ca, name, symbol, launch_ts, chain, source_type;"
+            params.extend([ca_l, chain_norm])
             cur.execute(sql, tuple(params))
             return cur.fetchone()
         return (ca_l, name, symbol, launch_ts, old_chain, old_source)
@@ -120,7 +123,7 @@ def _upsert_coin(
             VALUES (%s, %s, %s, %s, %s, %s)
             RETURNING ca, name, symbol, launch_ts, chain, source_type;
             """,
-            (ca_l, name or "Unknown", symbol, launch_ts, chain_norm or "solana", add_source),
+            (ca_l, name or "Unknown", symbol, launch_ts, chain_norm, add_source),
         )
         return cur.fetchone()
 
@@ -212,11 +215,11 @@ def dex_add(payload: DexAdd):
 
             cur.execute(
                 """
-                INSERT INTO trades (ca, entry_mcap_usd, size_usd, trade_id)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO trades (ca, chain, entry_mcap_usd, size_usd, trade_id)
+                VALUES (%s, %s, %s, %s, %s)
                 RETURNING id, trade_id, entry_ts;
                 """,
-                (ca, payload.entry_mcap_usd, payload.size_usd, trade_id_str),
+                (ca, coin[4], payload.entry_mcap_usd, payload.size_usd, trade_id_str),
             )
             trade = cur.fetchone()
             trade_id_int = trade[0]  # Get the database ID (INTEGER)
@@ -263,9 +266,10 @@ def influencer_add(payload: InfluencerAdd):
                 "influencer",
             )
 
+            accounts_table = _accounts_table(cur)
             cur.execute(
-                """
-                INSERT INTO accounts (platform, handle)
+                f"""
+                INSERT INTO {accounts_table} (platform, handle)
                 VALUES (%s, %s)
                 ON CONFLICT (platform, handle) DO UPDATE SET handle = EXCLUDED.handle
                 RETURNING account_id;
@@ -276,11 +280,11 @@ def influencer_add(payload: InfluencerAdd):
 
             cur.execute(
                 """
-                INSERT INTO tips (account_id, ca, post_ts, post_mcap_usd)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO tips (account_id, ca, chain, post_ts, post_mcap_usd)
+                VALUES (%s, %s, %s, %s, %s)
                 RETURNING tip_id;
                 """,
-                (acc_id, ca, payload.post_ts, payload.post_mcap_usd),
+                (acc_id, ca, coin[4], payload.post_ts, payload.post_mcap_usd),
             )
             tip_id = cur.fetchone()[0]  # Get the INTEGER id
 

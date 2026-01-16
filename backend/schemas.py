@@ -27,8 +27,10 @@ class CoinOut(BaseModel):
 class ContextOut(BaseModel):
     id: int
     active_ca: Optional[str] = None
+    active_chain: Optional[str] = None
     updated_ts: datetime
 
 
 class ContextSet(BaseModel):
     active_ca: Optional[str] = None  # null -> unset active coin
+    active_chain: Optional[str] = None

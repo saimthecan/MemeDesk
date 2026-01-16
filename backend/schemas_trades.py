@@ -19,6 +19,7 @@ class ScoringData(BaseModel):
 
 class TradeOpen(BaseModel):
     ca: str = Field(min_length=3)
+    chain: Optional[str] = None
     entry_mcap_usd: float = Field(gt=0)
     size_usd: Optional[float] = Field(default=None, gt=0)
     bubbles: Optional[BubblesData] = None
@@ -26,7 +27,7 @@ class TradeOpen(BaseModel):
 
 
 class TradeClose(BaseModel):
-    trade_id: str = Field(min_length=3)
+    trade_id: Optional[str] = Field(default=None, min_length=3)
     exit_mcap_usd: float = Field(gt=0)
     exit_reason: Optional[str] = None
 
@@ -35,6 +36,7 @@ class TradeOut(BaseModel):
     id: int
     trade_id: str
     ca: str
+    chain: Optional[str] = None
     coin_name: str
 
     entry_ts: datetime

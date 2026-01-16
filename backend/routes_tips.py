@@ -29,25 +29,33 @@ def _parse_cursor(cursor: str) -> tuple[datetime, int]:
     return ts, tip_id
 
 
+def _accounts_table(cur) -> str:
+    cur.execute(
+        "SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'accounts';"
+    )
+    return "accounts" if cur.fetchone() else "social_accounts"
+
+
 # -------- Accounts --------
 @router.post("/accounts", response_model=AccountOut)
 def add_account(payload: AccountCreate):
     with pool.connection() as conn:
         with conn.cursor() as cur:
+            accounts_table = _accounts_table(cur)
             try:
                 # UPSERT: Mevcut account varsa ID'sini döndür, yoksa yeni oluştur
                 cur.execute(
-                    """
-                    INSERT INTO accounts (platform, handle, tips_total, tips_win, tips_loss, win_rate_50p, rug_rate, avg_effect_pct)
-                    VALUES (%s, %s, 0, 0, 0, NULL, NULL, NULL)
-                    ON CONFLICT (platform, handle) DO UPDATE SET updated_ts = NOW()
+                    f"""
+                    INSERT INTO {accounts_table} (platform, handle)
+                    VALUES (%s, %s)
+                    ON CONFLICT (platform, handle) DO UPDATE SET handle = EXCLUDED.handle
                     RETURNING account_id, platform, handle, created_ts;
                     """,
                     (payload.platform, payload.handle),
                 )
                 row = cur.fetchone()
                 conn.commit()
-            except Exception as e:
+            except Exception:
                 conn.rollback()
                 raise
 
@@ -58,10 +66,11 @@ def add_account(payload: AccountCreate):
 def list_accounts(limit: int = Query(default=200, ge=1, le=1000)):
     with pool.connection() as conn:
         with conn.cursor() as cur:
+            accounts_table = _accounts_table(cur)
             cur.execute(
-                """
+                f"""
                 SELECT account_id, platform, handle, created_ts
-                FROM social_accounts
+                FROM {accounts_table}
                 ORDER BY created_ts DESC
                 LIMIT %s;
                 """,
@@ -77,25 +86,36 @@ def list_accounts(limit: int = Query(default=200, ge=1, le=1000)):
 def add_tip(payload: TipCreate):
     with pool.connection() as conn:
         with conn.cursor() as cur:
-            ca = payload.ca
+            ca = payload.ca.lower()
+            chain = payload.chain.lower() if payload.chain else None
 
             # ensure coin exists
-            cur.execute("SELECT 1 FROM coins WHERE ca = %s;", (ca,))
-            if cur.fetchone() is None:
-                raise HTTPException(status_code=404, detail="Coin not found")
+            if chain:
+                cur.execute("SELECT 1 FROM coins WHERE ca = %s AND chain = %s;", (ca, chain))
+                if cur.fetchone() is None:
+                    raise HTTPException(status_code=404, detail="Coin not found")
+            else:
+                cur.execute("SELECT chain FROM coins WHERE ca = %s LIMIT 2;", (ca,))
+                rows = cur.fetchall()
+                if not rows:
+                    raise HTTPException(status_code=404, detail="Coin not found")
+                if len(rows) > 1:
+                    raise HTTPException(status_code=409, detail="Multiple chains found for this CA")
+                chain = rows[0][0]
 
             # ensure account exists
-            cur.execute("SELECT 1 FROM social_accounts WHERE account_id = %s;", (payload.account_id,))
+            accounts_table = _accounts_table(cur)
+            cur.execute(f"SELECT 1 FROM {accounts_table} WHERE account_id = %s;", (payload.account_id,))
             if cur.fetchone() is None:
                 raise HTTPException(status_code=404, detail="Account not found")
 
             cur.execute(
                 """
-                INSERT INTO tips (account_id, ca, post_ts, post_mcap_usd)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO tips (account_id, ca, chain, post_ts, post_mcap_usd)
+                VALUES (%s, %s, %s, %s, %s)
                 RETURNING tip_id;
                 """,
-                (payload.account_id, ca, payload.post_ts, payload.post_mcap_usd),
+                (payload.account_id, ca, chain, payload.post_ts, payload.post_mcap_usd),
             )
             row = cur.fetchone()
             tip_id = row[0]
@@ -123,7 +143,7 @@ def add_tip(payload: TipCreate):
             
             conn.commit()
 
-    return {"ok": True, "tip_id": tip_id}
+    return {"ok": True, "tip_id": tip_id, "chain": chain}
 
 
 @router.patch("/tips/{tip_id}", response_model=dict)
@@ -142,8 +162,7 @@ def update_tip(tip_id: int, payload: TipUpdate):
 
     if payload.rug_flag is not None:
         fields.append("rug_flag = %s")
-        # 0 -> False, 1 -> True olarak gönderiyoruz
-        values.append(bool(payload.rug_flag)) 
+        values.append(bool(payload.rug_flag))
 
 
 
@@ -152,24 +171,20 @@ def update_tip(tip_id: int, payload: TipUpdate):
 
     with pool.connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT ca FROM tips WHERE tip_id = %s;", (tip_id,))
-            row = cur.fetchone()
-            if row is None:
-                conn.rollback()
-                raise HTTPException(status_code=404, detail="Tip not found")
-            ca = row[0]
-
-            values.extend([ca])
+            values.append(tip_id)
             cur.execute(
                 f"""
                 UPDATE tips
                 SET {", ".join(fields)}
-                WHERE ca = %s
+                WHERE tip_id = %s
                 RETURNING tip_id;
                 """,
                 tuple(values),
             )
             row = cur.fetchone()
+            if row is None:
+                conn.rollback()
+                raise HTTPException(status_code=404, detail="Tip not found")
             conn.commit()
 
     return {"ok": True, "tip_id": row[0]}
@@ -179,20 +194,31 @@ def update_tip(tip_id: int, payload: TipUpdate):
 def list_tips(
     limit: int = Query(default=200, ge=1, le=1000),
     ca: str | None = None,
+    chain: str | None = None,
 ):
+    if ca:
+        ca = ca.lower()
+    if chain:
+        chain = chain.lower()
     with pool.connection() as conn:
         with conn.cursor() as cur:
             params = []
             sql = """
                 SELECT
-                  tip_id, ca, coin_name, account_id, platform, handle,
+                  tip_id, ca, chain, coin_name, account_id, platform, handle,
                   post_ts, post_mcap_usd, peak_mcap_usd, trough_mcap_usd, rug_flag,
                   gain_pct, drop_pct, effect_pct
                 FROM v_tip_gain_loss
             """
+            where = []
             if ca:
-                sql += " WHERE ca = %s"
+                where.append("ca = %s")
                 params.append(ca)
+            if chain:
+                where.append("chain = %s")
+                params.append(chain)
+            if where:
+                sql += " WHERE " + " AND ".join(where)
             sql += " ORDER BY post_ts DESC LIMIT %s;"
             params.append(limit)
             cur.execute(sql, tuple(params))
@@ -256,18 +282,19 @@ def list_tips(
             {
                 "tip_id": r[0],
                 "ca": r[1],
-                "coin_name": r[2],
-                "account_id": r[3],
-                "platform": r[4],
-                "handle": r[5],
-                "post_ts": r[6],
-                "post_mcap_usd": float(r[7]),
-                "peak_mcap_usd": float(r[8]) if r[8] is not None else None,
-                "trough_mcap_usd": float(r[9]) if r[9] is not None else None,
-                "rug_flag": r[10],
-                "gain_pct": float(r[11]) if r[11] is not None else None,
-                "drop_pct": float(r[12]) if r[12] is not None else None,
-                "effect_pct": float(r[13]) if r[13] is not None else None,
+                "chain": r[2],
+                "coin_name": r[3],
+                "account_id": r[4],
+                "platform": r[5],
+                "handle": r[6],
+                "post_ts": r[7],
+                "post_mcap_usd": float(r[8]),
+                "peak_mcap_usd": float(r[9]) if r[9] is not None else None,
+                "trough_mcap_usd": float(r[10]) if r[10] is not None else None,
+                "rug_flag": r[11],
+                "gain_pct": float(r[12]) if r[12] is not None else None,
+                "drop_pct": float(r[13]) if r[13] is not None else None,
+                "effect_pct": float(r[14]) if r[14] is not None else None,
                 "bubbles": bubbles,
                 "scoring": scoring,
             }
@@ -279,9 +306,14 @@ def list_tips(
 def list_tips_paged(
     limit: int = Query(default=100, ge=1, le=500),
     ca: str | None = None,
+    chain: str | None = None,
     q: str | None = None,
     cursor: str | None = None,
 ):
+    if ca:
+        ca = ca.lower()
+    if chain:
+        chain = chain.lower()
     cursor_ts = None
     cursor_id = None
     if cursor:
@@ -297,15 +329,18 @@ def list_tips_paged(
             where = []
             sql = """
                 SELECT
-                  v.tip_id, v.ca, v.coin_name, v.account_id, v.platform, v.handle,
+                  v.tip_id, v.ca, v.chain, v.coin_name, v.account_id, v.platform, v.handle,
                   v.post_ts, v.post_mcap_usd, v.peak_mcap_usd, v.trough_mcap_usd, v.rug_flag,
                   v.gain_pct, v.drop_pct, v.effect_pct
                 FROM v_tip_gain_loss v
-                LEFT JOIN coins c ON v.ca = c.ca
+                LEFT JOIN coins c ON v.ca = c.ca AND v.chain = c.chain
             """
             if ca:
                 where.append("v.ca = %s")
                 params.append(ca)
+            if chain:
+                where.append("v.chain = %s")
+                params.append(chain)
             if cursor_ts is not None and cursor_id is not None:
                 where.append("(v.post_ts, v.tip_id) < (%s, %s)")
                 params.extend([cursor_ts, cursor_id])
@@ -324,10 +359,13 @@ def list_tips_paged(
 
             count_params = []
             count_where = []
-            count_sql = "SELECT COUNT(*) FROM v_tip_gain_loss v LEFT JOIN coins c ON v.ca = c.ca"
+            count_sql = "SELECT COUNT(*) FROM v_tip_gain_loss v LEFT JOIN coins c ON v.ca = c.ca AND v.chain = c.chain"
             if ca:
                 count_where.append("v.ca = %s")
                 count_params.append(ca)
+            if chain:
+                count_where.append("v.chain = %s")
+                count_params.append(chain)
             if q_like:
                 count_where.append(
                     "(v.coin_name ILIKE %s OR v.handle ILIKE %s OR v.platform ILIKE %s "
@@ -397,18 +435,19 @@ def list_tips_paged(
             {
                 "tip_id": r[0],
                 "ca": r[1],
-                "coin_name": r[2],
-                "account_id": r[3],
-                "platform": r[4],
-                "handle": r[5],
-                "post_ts": r[6],
-                "post_mcap_usd": float(r[7]),
-                "peak_mcap_usd": float(r[8]) if r[8] is not None else None,
-                "trough_mcap_usd": float(r[9]) if r[9] is not None else None,
-                "rug_flag": r[10],
-                "gain_pct": float(r[11]) if r[11] is not None else None,
-                "drop_pct": float(r[12]) if r[12] is not None else None,
-                "effect_pct": float(r[13]) if r[13] is not None else None,
+                "chain": r[2],
+                "coin_name": r[3],
+                "account_id": r[4],
+                "platform": r[5],
+                "handle": r[6],
+                "post_ts": r[7],
+                "post_mcap_usd": float(r[8]),
+                "peak_mcap_usd": float(r[9]) if r[9] is not None else None,
+                "trough_mcap_usd": float(r[10]) if r[10] is not None else None,
+                "rug_flag": r[11],
+                "gain_pct": float(r[12]) if r[12] is not None else None,
+                "drop_pct": float(r[13]) if r[13] is not None else None,
+                "effect_pct": float(r[14]) if r[14] is not None else None,
                 "bubbles": bubbles,
                 "scoring": scoring,
             }
@@ -417,7 +456,7 @@ def list_tips_paged(
     next_cursor = None
     if len(rows) == limit:
         last = rows[-1]
-        last_ts = last[6].isoformat() if last[6] else ""
+        last_ts = last[7].isoformat() if last[7] else ""
         next_cursor = f"{last_ts},{last[0]}"
 
     return {"items": items, "total_count": total_count, "next_cursor": next_cursor}
